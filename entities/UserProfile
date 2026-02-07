@@ -1,0 +1,48 @@
+{
+  "name": "UserProfile",
+  "type": "object",
+  "properties": {
+    "display_name": {
+      "type": "string",
+      "description": "User's preferred name"
+    },
+    "avatar_url": {
+      "type": "string",
+      "description": "Profile picture URL"
+    },
+    "interests": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "List of interests like Gardening, Chess, History"
+    },
+    "language": {
+      "type": "string",
+      "description": "Preferred language for matching"
+    },
+    "timezone": {
+      "type": "string",
+      "description": "User's timezone"
+    },
+    "bio": {
+      "type": "string",
+      "description": "Short biography"
+    },
+    "is_online": {
+      "type": "boolean",
+      "default": false
+    },
+    "last_active": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "onboarding_complete": {
+      "type": "boolean",
+      "default": false
+    }
+  },
+  "required": [
+    "display_name"
+  ]
+}

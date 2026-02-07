@@ -1,0 +1,38 @@
+{
+  "name": "CallSession",
+  "type": "object",
+  "properties": {
+    "caller_id": {
+      "type": "string"
+    },
+    "receiver_id": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "ringing",
+        "active",
+        "ended",
+        "missed"
+      ],
+      "default": "ringing"
+    },
+    "started_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "ended_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "game_played": {
+      "type": "boolean",
+      "default": false
+    }
+  },
+  "required": [
+    "caller_id",
+    "receiver_id"
+  ]
+}

@@ -1,0 +1,41 @@
+{
+  "name": "Connection",
+  "type": "object",
+  "properties": {
+    "user_a_id": {
+      "type": "string",
+      "description": "First user ID"
+    },
+    "user_b_id": {
+      "type": "string",
+      "description": "Second user ID"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "accepted",
+        "declined"
+      ],
+      "default": "pending"
+    },
+    "compatibility_score": {
+      "type": "number",
+      "description": "Match score 0-100"
+    },
+    "shared_interests": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "last_interaction": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": [
+    "user_a_id",
+    "user_b_id"
+  ]
+}
