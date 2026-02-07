@@ -100,7 +100,7 @@ export default function Layout({ children, currentPageName }) {
                 <span className="text-2xl">🌟</span>
               </div>
               <span className="text-2xl font-bold text-slate-800 hidden sm:block">
-                Golden Connections
+                A Wrinkle in Time
               </span>
             </Link>
 
