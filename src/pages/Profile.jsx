@@ -6,7 +6,7 @@ import {
   Globe, Heart, Clock, RefreshCw
 } from 'lucide-react';
 import { createPageUrl } from '@/utils';
-import { base44 } from '@/api/base44Client';
+import { appClient } from '@/api/base44Client';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import LargeButton from '@/components/ui/LargeButton';
 import InterestTag from '@/components/matching/InterestTag';
@@ -44,7 +44,7 @@ export default function Profile() {
     queryKey: ['currentUser'],
     queryFn: async () => {
       try {
-        return await base44.auth.me();
+        return await appClient.auth.me();
       } catch (e) {
         // Return null if auth fails
         return null;
@@ -63,7 +63,7 @@ export default function Profile() {
       
       // Try backend
       try {
-        const profiles = await base44.entities.UserProfile.list();
+        const profiles = await appClient.entities.UserProfile.list();
         return profiles[0] || null;
       } catch (e) {
         return null;
@@ -79,7 +79,7 @@ export default function Profile() {
       // Try to save to backend
       try {
         if (profile?.id && !profile.id.startsWith('mock')) {
-          await base44.entities.UserProfile.update(profile.id, data);
+          await appClient.entities.UserProfile.update(profile.id, data);
         }
       } catch (e) {
         console.log('Backend not available, saved to localStorage');
@@ -253,7 +253,7 @@ export default function Profile() {
 
     try {
       // Try to upload to backend
-      const { file_url } = await base44.integrations.Core.UploadFile({ file });
+      const { file_url } = await appClient.integrations.Core.UploadFile({ file });
       setEditedProfile({ ...editedProfile, avatar_url: file_url });
     } catch (error) {
       // If backend fails, create a local URL

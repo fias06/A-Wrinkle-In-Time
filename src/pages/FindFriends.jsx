@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Search, RefreshCw, Filter, Users, Loader2, UserCheck, UserMinus } from 'lucide-react';
 import { createPageUrl } from '@/utils';
-import { base44 } from '@/api/base44Client';
+import { appClient } from '@/api/base44Client';
 import { useQuery } from '@tanstack/react-query';
 import UserCard from '@/components/matching/UserCard';
 import LargeButton from '@/components/ui/LargeButton';
@@ -80,7 +80,7 @@ export default function FindFriends() {
       
       // Try backend
       try {
-        const profiles = await base44.entities.UserProfile.list();
+        const profiles = await appClient.entities.UserProfile.list();
         return profiles[0] || null;
       } catch (e) {
         return null;
@@ -91,27 +91,28 @@ export default function FindFriends() {
   const { data: allProfiles, isLoading, refetch } = useQuery({
     queryKey: ['profiles'],
     queryFn: async () => {
-      try {
-        const profiles = await base44.entities.UserProfile.filter({ onboarding_complete: true });
-        return profiles.length > 0 ? profiles : MOCK_PROFILES;
-      } catch (e) {
-        // Backend not available, use mock data
-        return MOCK_PROFILES;
-      }
+      // Always return mock profiles for demo - these are "online friends"
+      // In a real app, this would fetch from a backend
+      return MOCK_PROFILES;
     }
   });
 
   // Calculate matches with compatibility scores
   const matches = React.useMemo(() => {
-    if (!allProfiles || !myProfile) return [];
+    if (!allProfiles) return [];
+    
+    // Use default values if no profile yet
+    const userInterests = myProfile?.interests || [];
+    const userLanguage = myProfile?.language || 'English';
+    const userId = myProfile?.id || '';
     
     return allProfiles
-      .filter(p => p.id !== myProfile.id)
+      .filter(p => p.id !== userId)
       .map(profile => {
         const sharedInterests = (profile.interests || []).filter(
-          i => (myProfile.interests || []).includes(i)
+          i => userInterests.includes(i)
         );
-        const languageMatch = profile.language === myProfile.language;
+        const languageMatch = profile.language === userLanguage;
         const interestScore = sharedInterests.length * 15;
         const languageScore = languageMatch ? 30 : 0;
         const compatibilityScore = Math.min(100, interestScore + languageScore + 20);

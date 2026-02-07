@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, ArrowRight, Check, User, Globe, Heart, Music, Camera, RefreshCw } from 'lucide-react';
 import { createPageUrl } from '@/utils';
-import { base44 } from '@/api/base44Client';
+import { appClient } from '@/api/base44Client';
 import VoiceButton from '@/components/voice/VoiceButton';
 import LargeButton from '@/components/ui/LargeButton';
 import InterestTag from '@/components/matching/InterestTag';
@@ -244,7 +244,7 @@ export default function Onboarding() {
       
       // Try to load from backend if available
       try {
-        const profiles = await base44.entities.UserProfile.list();
+        const profiles = await appClient.entities.UserProfile.list();
         if (profiles.length > 0 && profiles[0].onboarding_complete) {
           localStorage.setItem('userProfile', JSON.stringify(profiles[0]));
           navigate(createPageUrl('FindFriends'));
@@ -366,11 +366,11 @@ export default function Onboarding() {
 
       // Try to save to backend if available
       try {
-        const existingProfiles = await base44.entities.UserProfile.list();
+        const existingProfiles = await appClient.entities.UserProfile.list();
         if (existingProfiles.length > 0) {
-          await base44.entities.UserProfile.update(existingProfiles[0].id, profileData);
+          await appClient.entities.UserProfile.update(existingProfiles[0].id, profileData);
         } else {
-          await base44.entities.UserProfile.create(profileData);
+          await appClient.entities.UserProfile.create(profileData);
         }
       } catch (e) {
         // Backend not available, but we saved to localStorage so continue

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
-import { base44 } from '@/api/base44Client';
+import { appClient } from '@/api/base44Client';
 import { Home, Users, Gamepad2, User, Menu, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from "@/lib/utils";
@@ -17,7 +17,7 @@ export default function Layout({ children, currentPageName }) {
   }, []);
 
   const checkAuth = async () => {
-    const auth = await base44.auth.isAuthenticated();
+    const auth = await appClient.auth.isAuthenticated();
     setIsAuthenticated(auth);
   };
 
