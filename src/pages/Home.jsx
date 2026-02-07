@@ -10,6 +10,7 @@ import AccessibleCard from '@/components/ui/AccessibleCard';
 
 export default function Home() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [hasProfile, setHasProfile] = useState(false);
   const voiceRef = useRef(null);
 
   useEffect(() => {
@@ -17,8 +18,21 @@ export default function Home() {
   }, []);
 
   const checkAuth = async () => {
-    const authenticated = await base44.auth.isAuthenticated();
-    setIsAuthenticated(authenticated);
+    // Check localStorage for profile
+    const localProfile = localStorage.getItem('userProfile');
+    if (localProfile) {
+      setHasProfile(true);
+      setIsAuthenticated(true);
+      return;
+    }
+    
+    // Try backend auth
+    try {
+      const authenticated = await base44.auth.isAuthenticated();
+      setIsAuthenticated(authenticated);
+    } catch (e) {
+      setIsAuthenticated(false);
+    }
   };
 
   const handleVoiceCommand = (command) => {

@@ -47,9 +47,25 @@ export default function Onboarding() {
 
   const loadExistingProfile = async () => {
     try {
-      const profiles = await base44.entities.UserProfile.list();
-      if (profiles.length > 0 && profiles[0].onboarding_complete) {
-        navigate(createPageUrl('FindFriends'));
+      // Check localStorage first for offline support
+      const localProfile = localStorage.getItem('userProfile');
+      if (localProfile) {
+        const profile = JSON.parse(localProfile);
+        if (profile.onboarding_complete) {
+          navigate(createPageUrl('FindFriends'));
+          return;
+        }
+      }
+      
+      // Try to load from backend if available
+      try {
+        const profiles = await base44.entities.UserProfile.list();
+        if (profiles.length > 0 && profiles[0].onboarding_complete) {
+          localStorage.setItem('userProfile', JSON.stringify(profiles[0]));
+          navigate(createPageUrl('FindFriends'));
+        }
+      } catch (e) {
+        // Backend not available, continue with local storage
       }
     } catch (e) {
       // No profile yet
@@ -135,16 +151,26 @@ export default function Onboarding() {
     try {
       const profileData = {
         ...formData,
+        id: Date.now().toString(),
         onboarding_complete: true,
         is_online: true,
         last_active: new Date().toISOString()
       };
 
-      const existingProfiles = await base44.entities.UserProfile.list();
-      if (existingProfiles.length > 0) {
-        await base44.entities.UserProfile.update(existingProfiles[0].id, profileData);
-      } else {
-        await base44.entities.UserProfile.create(profileData);
+      // Save to localStorage for offline support
+      localStorage.setItem('userProfile', JSON.stringify(profileData));
+
+      // Try to save to backend if available
+      try {
+        const existingProfiles = await base44.entities.UserProfile.list();
+        if (existingProfiles.length > 0) {
+          await base44.entities.UserProfile.update(existingProfiles[0].id, profileData);
+        } else {
+          await base44.entities.UserProfile.create(profileData);
+        }
+      } catch (e) {
+        // Backend not available, but we saved to localStorage so continue
+        console.log('Backend not available, using local storage');
       }
 
       voiceRef.current?.speak("Wonderful! Your profile is all set. Let's find you some friends!");
@@ -152,6 +178,7 @@ export default function Onboarding() {
         navigate(createPageUrl('FindFriends'));
       }, 2000);
     } catch (error) {
+      console.error('Error saving profile:', error);
       voiceRef.current?.speak("Something went wrong. Let's try again.");
     } finally {
       setIsLoading(false);

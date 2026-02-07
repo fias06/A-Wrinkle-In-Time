@@ -11,6 +11,55 @@ import LargeButton from '@/components/ui/LargeButton';
 import InterestTag from '@/components/matching/InterestTag';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 
+// Mock profiles for demo when backend is not available
+const MOCK_PROFILES = [
+  {
+    id: 'mock1',
+    display_name: 'Margaret',
+    interests: ['Gardening', 'Reading', 'Cooking', 'Nature'],
+    language: 'English',
+    bio: 'Love spending time in my garden and trying new recipes!',
+    onboarding_complete: true,
+    is_online: true
+  },
+  {
+    id: 'mock2',
+    display_name: 'Robert',
+    interests: ['Chess', 'History', 'Reading', 'Music'],
+    language: 'English',
+    bio: 'Retired teacher who loves a good chess match.',
+    onboarding_complete: true,
+    is_online: true
+  },
+  {
+    id: 'mock3',
+    display_name: 'Helen',
+    interests: ['Knitting', 'Cooking', 'Music', 'Pets'],
+    language: 'English',
+    bio: 'Passionate about crafts and my two cats!',
+    onboarding_complete: true,
+    is_online: false
+  },
+  {
+    id: 'mock4',
+    display_name: 'James',
+    interests: ['Photography', 'Travel', 'Nature', 'Birdwatching'],
+    language: 'English',
+    bio: 'Amateur photographer who loves wildlife.',
+    onboarding_complete: true,
+    is_online: true
+  },
+  {
+    id: 'mock5',
+    display_name: 'Patricia',
+    interests: ['Dancing', 'Music', 'Movies', 'Art'],
+    language: 'Spanish',
+    bio: 'Former dance instructor. Love classic films!',
+    onboarding_complete: true,
+    is_online: true
+  }
+];
+
 export default function FindFriends() {
   const navigate = useNavigate();
   const voiceRef = useRef(null);
@@ -20,14 +69,33 @@ export default function FindFriends() {
   const { data: myProfile } = useQuery({
     queryKey: ['myProfile'],
     queryFn: async () => {
-      const profiles = await base44.entities.UserProfile.list();
-      return profiles[0] || null;
+      // Try localStorage first
+      const localProfile = localStorage.getItem('userProfile');
+      if (localProfile) {
+        return JSON.parse(localProfile);
+      }
+      
+      // Try backend
+      try {
+        const profiles = await base44.entities.UserProfile.list();
+        return profiles[0] || null;
+      } catch (e) {
+        return null;
+      }
     }
   });
 
   const { data: allProfiles, isLoading, refetch } = useQuery({
     queryKey: ['profiles'],
-    queryFn: () => base44.entities.UserProfile.filter({ onboarding_complete: true })
+    queryFn: async () => {
+      try {
+        const profiles = await base44.entities.UserProfile.filter({ onboarding_complete: true });
+        return profiles.length > 0 ? profiles : MOCK_PROFILES;
+      } catch (e) {
+        // Backend not available, use mock data
+        return MOCK_PROFILES;
+      }
+    }
   });
 
   // Calculate matches with compatibility scores

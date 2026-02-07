@@ -35,23 +35,58 @@ export default function Profile() {
 
   const { data: user } = useQuery({
     queryKey: ['currentUser'],
-    queryFn: () => base44.auth.me()
+    queryFn: async () => {
+      try {
+        return await base44.auth.me();
+      } catch (e) {
+        // Return null if auth fails
+        return null;
+      }
+    }
   });
 
   const { data: profile, isLoading } = useQuery({
     queryKey: ['myProfile'],
     queryFn: async () => {
-      const profiles = await base44.entities.UserProfile.list();
-      return profiles[0] || null;
+      // Try localStorage first
+      const localProfile = localStorage.getItem('userProfile');
+      if (localProfile) {
+        return JSON.parse(localProfile);
+      }
+      
+      // Try backend
+      try {
+        const profiles = await base44.entities.UserProfile.list();
+        return profiles[0] || null;
+      } catch (e) {
+        return null;
+      }
     }
   });
 
   const updateMutation = useMutation({
-    mutationFn: (data) => base44.entities.UserProfile.update(profile.id, data),
+    mutationFn: async (data) => {
+      // Save to localStorage
+      localStorage.setItem('userProfile', JSON.stringify(data));
+      
+      // Try to save to backend
+      try {
+        if (profile?.id && !profile.id.startsWith('mock')) {
+          await base44.entities.UserProfile.update(profile.id, data);
+        }
+      } catch (e) {
+        console.log('Backend not available, saved to localStorage');
+      }
+      return data;
+    },
     onSuccess: () => {
       queryClient.invalidateQueries(['myProfile']);
       setIsEditing(false);
       voiceRef.current?.speak("Your profile has been updated!");
+    },
+    onError: () => {
+      voiceRef.current?.speak("Your profile has been saved locally!");
+      setIsEditing(false);
     }
   });
 
@@ -116,10 +151,14 @@ export default function Profile() {
     if (!file) return;
 
     try {
+      // Try to upload to backend
       const { file_url } = await base44.integrations.Core.UploadFile({ file });
       setEditedProfile({ ...editedProfile, avatar_url: file_url });
     } catch (error) {
-      voiceRef.current?.speak("Sorry, I couldn't upload the photo. Please try again.");
+      // If backend fails, create a local URL
+      const localUrl = URL.createObjectURL(file);
+      setEditedProfile({ ...editedProfile, avatar_url: localUrl });
+      voiceRef.current?.speak("Photo updated locally.");
     }
   };
 
