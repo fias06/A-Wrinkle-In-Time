@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, RefreshCw, Filter, Users, Loader2 } from 'lucide-react';
+import { Search, RefreshCw, Filter, Users, Loader2, UserCheck, UserMinus } from 'lucide-react';
 import { createPageUrl } from '@/utils';
 import { base44 } from '@/api/base44Client';
 import { useQuery } from '@tanstack/react-query';
@@ -63,6 +63,11 @@ export default function FindFriends() {
   const navigate = useNavigate();
   const [selectedInterestFilter, setSelectedInterestFilter] = useState([]);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [friends, setFriends] = useState(() => {
+    const saved = localStorage.getItem('myFriends');
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [showFriendsList, setShowFriendsList] = useState(false);
 
   const { data: myProfile } = useQuery({
     queryKey: ['myProfile'],
@@ -128,9 +133,22 @@ export default function FindFriends() {
     navigate(createPageUrl('VideoCall') + `?userId=${user.id}&userName=${encodeURIComponent(user.display_name)}`);
   };
 
-  const handleMessage = (user) => {
-    // Chat feature
+  const handleAddFriend = (user) => {
+    const isAlreadyFriend = friends.some(f => f.id === user.id);
+    if (!isAlreadyFriend) {
+      const newFriends = [...friends, user];
+      setFriends(newFriends);
+      localStorage.setItem('myFriends', JSON.stringify(newFriends));
+    }
   };
+
+  const handleRemoveFriend = (userId) => {
+    const newFriends = friends.filter(f => f.id !== userId);
+    setFriends(newFriends);
+    localStorage.setItem('myFriends', JSON.stringify(newFriends));
+  };
+
+  const isFriend = (userId) => friends.some(f => f.id === userId);
 
   if (!myProfile?.onboarding_complete) {
     navigate(createPageUrl('Onboarding'));
@@ -143,7 +161,7 @@ export default function FindFriends() {
         {/* Header */}
         <div className="text-center mb-8">
           <h1 className="text-4xl md:text-5xl font-bold text-slate-800 mb-4">
-            Find Friends
+            Online Friends
           </h1>
           <p className="text-xl text-slate-600">
             People who share your interests
@@ -153,11 +171,11 @@ export default function FindFriends() {
         {/* Action Buttons */}
         <div className="flex flex-wrap justify-center gap-4 mb-8">
           <LargeButton
-            onClick={() => refetch()}
-            variant="secondary"
-            icon={RefreshCw}
+            onClick={() => setShowFriendsList(!showFriendsList)}
+            variant={showFriendsList ? "primary" : "secondary"}
+            icon={UserCheck}
           >
-            Find New Friends
+            My Friends ({friends.length})
           </LargeButton>
 
           <Sheet open={isFilterOpen} onOpenChange={setIsFilterOpen}>
@@ -209,7 +227,89 @@ export default function FindFriends() {
         </div>
 
         {/* Results */}
-        {isLoading ? (
+        {showFriendsList ? (
+          /* My Friends List */
+          <div className="space-y-6">
+            <p className="text-xl text-slate-600 text-center">
+              You have <strong>{friends.length}</strong> friend{friends.length !== 1 ? 's' : ''}
+            </p>
+            {friends.length === 0 ? (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="text-center py-16 bg-white rounded-3xl border-4 border-slate-200"
+              >
+                <UserCheck className="w-20 h-20 text-slate-300 mx-auto mb-6" />
+                <h3 className="text-2xl font-bold text-slate-700 mb-4">
+                  No friends added yet
+                </h3>
+                <p className="text-xl text-slate-500 mb-6">
+                  Add friends from the online users list
+                </p>
+                <LargeButton onClick={() => setShowFriendsList(false)} variant="primary">
+                  Browse Online Users
+                </LargeButton>
+              </motion.div>
+            ) : (
+              <AnimatePresence>
+                {friends.map((user, index) => (
+                  <motion.div
+                    key={user.id}
+                    initial={{ opacity: 0, y: 30 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: index * 0.1 }}
+                    className="bg-white rounded-3xl p-6 border-4 border-emerald-200 shadow-xl"
+                  >
+                    <div className="flex items-center gap-6">
+                      {/* Avatar */}
+                      {user?.avatar_url ? (
+                        <img
+                          src={user.avatar_url}
+                          alt={user.display_name}
+                          className="w-20 h-20 rounded-2xl object-cover border-4 border-emerald-200"
+                        />
+                      ) : (
+                        <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-emerald-400 to-emerald-500 flex items-center justify-center border-4 border-emerald-200">
+                          <span className="text-2xl font-bold text-white">
+                            {user?.display_name?.[0]?.toUpperCase() || '?'}
+                          </span>
+                        </div>
+                      )}
+                      
+                      {/* Info */}
+                      <div className="flex-1">
+                        <h3 className="text-2xl font-bold text-slate-800">
+                          {user?.display_name || 'Friend'}
+                        </h3>
+                        <p className="text-lg text-slate-500">
+                          {user?.interests?.slice(0, 3).join(', ')}
+                        </p>
+                      </div>
+
+                      {/* Actions */}
+                      <div className="flex gap-3">
+                        <LargeButton
+                          onClick={() => handleCall(user)}
+                          variant="success"
+                          className="!px-6"
+                        >
+                          Call
+                        </LargeButton>
+                        <button
+                          onClick={() => handleRemoveFriend(user.id)}
+                          className="p-4 rounded-xl bg-red-100 hover:bg-red-200 text-red-600 transition-all"
+                          aria-label="Remove friend"
+                        >
+                          <UserMinus className="w-6 h-6" />
+                        </button>
+                      </div>
+                    </div>
+                  </motion.div>
+                ))}
+              </AnimatePresence>
+            )}
+          </div>
+        ) : isLoading ? (
           <div className="flex flex-col items-center justify-center py-20">
             <Loader2 className="w-16 h-16 text-amber-500 animate-spin mb-4" />
             <p className="text-2xl text-slate-600">Finding friends...</p>
@@ -234,7 +334,7 @@ export default function FindFriends() {
         ) : (
           <div className="space-y-6">
             <p className="text-xl text-slate-600 text-center">
-              Found <strong>{matches.length}</strong> potential friends
+              Found <strong>{matches.length}</strong> online users
             </p>
             <AnimatePresence>
               {matches.map((user, index) => (
@@ -249,7 +349,8 @@ export default function FindFriends() {
                     sharedInterests={user.sharedInterests}
                     compatibilityScore={user.compatibilityScore}
                     onCall={() => handleCall(user)}
-                    onMessage={() => handleMessage(user)}
+                    onMessage={() => handleAddFriend(user)}
+                    isFriend={isFriend(user.id)}
                   />
                 </motion.div>
               ))}

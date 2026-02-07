@@ -76,7 +76,7 @@ export default function Layout({ children, currentPageName }) {
 
   const navItems = [
     { name: 'Home', icon: Home, page: 'Home' },
-    { name: 'Find Friends', icon: Users, page: 'FindFriends' },
+    { name: 'Online Friends', icon: Users, page: 'FindFriends' },
     { name: 'Play Games', icon: Gamepad2, page: 'Game' },
     { name: 'My Profile', icon: User, page: 'Profile' },
   ];

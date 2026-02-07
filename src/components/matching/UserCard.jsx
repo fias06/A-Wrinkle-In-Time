@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Phone, MessageCircle, Star, Globe } from 'lucide-react';
+import { Phone, MessageCircle, Star, Globe, UserCheck } from 'lucide-react';
 import LargeButton from '../ui/LargeButton';
 import { cn } from "@/lib/utils";
 
@@ -10,7 +10,8 @@ export default function UserCard({
   compatibilityScore,
   onCall,
   onMessage,
-  className
+  className,
+  isFriend = false
 }) {
   const initials = user?.display_name
     ?.split(' ')
@@ -112,15 +113,27 @@ export default function UserCard({
         >
           Start Call
         </LargeButton>
-        <LargeButton
-          onClick={onMessage}
-          variant="secondary"
-          icon={MessageCircle}
-          className="flex-1"
-          ariaLabel={`Message ${user?.display_name}`}
-        >
-          Say Hello
-        </LargeButton>
+        {isFriend ? (
+          <LargeButton
+            variant="outline"
+            icon={UserCheck}
+            className="flex-1"
+            disabled
+            ariaLabel={`${user?.display_name} is your friend`}
+          >
+            Added ✓
+          </LargeButton>
+        ) : (
+          <LargeButton
+            onClick={onMessage}
+            variant="secondary"
+            icon={MessageCircle}
+            className="flex-1"
+            ariaLabel={`Add ${user?.display_name} as friend`}
+          >
+            Add Friend
+          </LargeButton>
+        )}
       </div>
     </motion.div>
   );

@@ -124,7 +124,7 @@ export default function Home() {
             <>
               <Link to={createPageUrl('FindFriends')}>
                 <LargeButton variant="primary" icon={Users}>
-                  Find Friends Now
+                  Online Friends
                 </LargeButton>
               </Link>
               <Link to={createPageUrl('Profile')}>
