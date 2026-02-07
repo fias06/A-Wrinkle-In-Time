@@ -4,6 +4,9 @@ import { Volume2, VolumeX } from 'lucide-react';
 import VoiceButton from './VoiceButton';
 import { cn } from "@/lib/utils";
 
+const ELEVENLABS_API_KEY = 'sk_b2f7e426e2eef8b2f5f0b02d239a744c04068c80bc3c00a0';
+const ELEVENLABS_VOICE_ID = '21m00Tcm4TlvDq8ikWAM'; // Rachel - warm, friendly voice
+
 const VoiceAssistant = forwardRef(({ 
   onCommand,
   greeting,
@@ -14,10 +17,71 @@ const VoiceAssistant = forwardRef(({
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [currentMessage, setCurrentMessage] = useState('');
   const [isMuted, setIsMuted] = useState(false);
+  const [audioElement, setAudioElement] = useState(null);
 
-  const speak = useCallback((text) => {
+  const speak = useCallback(async (text) => {
     if (isMuted || !text) return Promise.resolve();
     
+    setCurrentMessage(text);
+    setIsSpeaking(true);
+
+    try {
+      const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${ELEVENLABS_VOICE_ID}`, {
+        method: 'POST',
+        headers: {
+          'Accept': 'audio/mpeg',
+          'Content-Type': 'application/json',
+          'xi-api-key': ELEVENLABS_API_KEY
+        },
+        body: JSON.stringify({
+          text: text,
+          model_id: 'eleven_monolingual_v1',
+          voice_settings: {
+            stability: 0.5,
+            similarity_boost: 0.75
+          }
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('ElevenLabs API error');
+      }
+
+      const audioBlob = await response.blob();
+      const audioUrl = URL.createObjectURL(audioBlob);
+      const audio = new Audio(audioUrl);
+      
+      setAudioElement(audio);
+
+      return new Promise((resolve) => {
+        audio.onended = () => {
+          setIsSpeaking(false);
+          setCurrentMessage('');
+          URL.revokeObjectURL(audioUrl);
+          resolve();
+        };
+
+        audio.onerror = () => {
+          setIsSpeaking(false);
+          setCurrentMessage('');
+          URL.revokeObjectURL(audioUrl);
+          resolve();
+        };
+
+        audio.play().catch(() => {
+          // Fallback to browser speech synthesis if audio fails
+          fallbackSpeak(text).then(resolve);
+        });
+      });
+    } catch (error) {
+      console.error('ElevenLabs TTS error:', error);
+      // Fallback to browser speech synthesis
+      return fallbackSpeak(text);
+    }
+  }, [isMuted]);
+
+  // Fallback to browser speech synthesis
+  const fallbackSpeak = useCallback((text) => {
     return new Promise((resolve) => {
       if ('speechSynthesis' in window) {
         window.speechSynthesis.cancel();
@@ -27,7 +91,6 @@ const VoiceAssistant = forwardRef(({
         utterance.pitch = 1;
         utterance.volume = 1;
         
-        // Try to get a friendly voice
         const voices = window.speechSynthesis.getVoices();
         const preferredVoice = voices.find(v => 
           v.name.includes('Samantha') || 
@@ -53,14 +116,20 @@ const VoiceAssistant = forwardRef(({
         
         window.speechSynthesis.speak(utterance);
       } else {
+        setIsSpeaking(false);
+        setCurrentMessage('');
         resolve();
       }
     });
-  }, [isMuted]);
+  }, []);
 
   useImperativeHandle(ref, () => ({
     speak,
     stopSpeaking: () => {
+      if (audioElement) {
+        audioElement.pause();
+        audioElement.currentTime = 0;
+      }
       if ('speechSynthesis' in window) {
         window.speechSynthesis.cancel();
       }
@@ -70,7 +139,7 @@ const VoiceAssistant = forwardRef(({
   }));
 
   useEffect(() => {
-    // Load voices
+    // Load voices for fallback
     if ('speechSynthesis' in window) {
       window.speechSynthesis.getVoices();
     }

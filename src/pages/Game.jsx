@@ -3,30 +3,13 @@ import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Gamepad2, Users, ArrowLeft, Play } from 'lucide-react';
 import { createPageUrl } from '@/utils';
-import VoiceAssistant from '@/components/voice/VoiceAssistant';
 import CoopGame from '@/components/game/CoopGame';
 import LargeButton from '@/components/ui/LargeButton';
 
 export default function Game() {
   const navigate = useNavigate();
-  const voiceRef = useRef(null);
   const [isPlaying, setIsPlaying] = useState(false);
-
-  const handleVoiceCommand = (command) => {
-    const lower = command.toLowerCase();
-
-    if (lower.includes('play') || lower.includes('start')) {
-      setIsPlaying(true);
-      voiceRef.current?.speak("Starting the game! Use the controls or say jump, left, or right.");
-    } else if (lower.includes('stop') || lower.includes('quit')) {
-      setIsPlaying(false);
-      voiceRef.current?.speak("Game stopped.");
-    } else if (lower.includes('back') || lower.includes('home')) {
-      navigate(createPageUrl('Home'));
-    } else if (lower.includes('friends') || lower.includes('find')) {
-      navigate(createPageUrl('FindFriends'));
-    }
-  };
+  const gameRef = useRef(null);
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 py-8 px-6">
@@ -49,21 +32,13 @@ export default function Game() {
           <div className="w-20" /> {/* Spacer */}
         </div>
 
-        {/* Voice Assistant */}
-        <div className="mb-8">
-          <VoiceAssistant
-            ref={voiceRef}
-            greeting="Welcome to the game room! Say 'play' to start a practice game, or find a friend to play together."
-            onCommand={handleVoiceCommand}
-          />
-        </div>
-
         {isPlaying ? (
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
           >
             <CoopGame
+              ref={gameRef}
               isPlayer1={true}
               onGameAction={() => {}}
               remoteAction={null}

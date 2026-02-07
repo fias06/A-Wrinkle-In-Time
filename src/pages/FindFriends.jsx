@@ -1,11 +1,10 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Search, RefreshCw, Filter, Users, Loader2 } from 'lucide-react';
 import { createPageUrl } from '@/utils';
 import { base44 } from '@/api/base44Client';
 import { useQuery } from '@tanstack/react-query';
-import VoiceAssistant from '@/components/voice/VoiceAssistant';
 import UserCard from '@/components/matching/UserCard';
 import LargeButton from '@/components/ui/LargeButton';
 import InterestTag from '@/components/matching/InterestTag';
@@ -62,7 +61,6 @@ const MOCK_PROFILES = [
 
 export default function FindFriends() {
   const navigate = useNavigate();
-  const voiceRef = useRef(null);
   const [selectedInterestFilter, setSelectedInterestFilter] = useState([]);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
 
@@ -126,41 +124,12 @@ export default function FindFriends() {
       .sort((a, b) => b.compatibilityScore - a.compatibilityScore);
   }, [allProfiles, myProfile, selectedInterestFilter]);
 
-  const handleVoiceCommand = (command) => {
-    const lower = command.toLowerCase();
-
-    if (lower.includes('refresh') || lower.includes('new')) {
-      refetch();
-      voiceRef.current?.speak("Looking for new friends...");
-    } else if (lower.includes('filter')) {
-      setIsFilterOpen(true);
-      voiceRef.current?.speak("What interests would you like to filter by?");
-    } else if (lower.includes('call') || lower.includes('first')) {
-      if (matches.length > 0) {
-        handleCall(matches[0]);
-      }
-    } else if (lower.includes('home')) {
-      navigate(createPageUrl('Home'));
-    } else {
-      // Check if mentioning a name
-      const mentionedUser = matches.find(m => 
-        lower.includes(m.display_name?.toLowerCase())
-      );
-      if (mentionedUser) {
-        handleCall(mentionedUser);
-      } else {
-        voiceRef.current?.speak(`I found ${matches.length} potential friends. Say a name to call them, or 'filter' to narrow down.`);
-      }
-    }
-  };
-
   const handleCall = (user) => {
-    voiceRef.current?.speak(`Starting a call with ${user.display_name}...`);
     navigate(createPageUrl('VideoCall') + `?userId=${user.id}&userName=${encodeURIComponent(user.display_name)}`);
   };
 
   const handleMessage = (user) => {
-    voiceRef.current?.speak(`Opening chat with ${user.display_name}...`);
+    // Chat feature
   };
 
   if (!myProfile?.onboarding_complete) {
@@ -179,15 +148,6 @@ export default function FindFriends() {
           <p className="text-xl text-slate-600">
             People who share your interests
           </p>
-        </div>
-
-        {/* Voice Assistant */}
-        <div className="mb-8">
-          <VoiceAssistant
-            ref={voiceRef}
-            greeting={`Welcome back, ${myProfile?.display_name}! I found ${matches.length} people who share your interests. Would you like to meet them?`}
-            onCommand={handleVoiceCommand}
-          />
         </div>
 
         {/* Action Buttons */}

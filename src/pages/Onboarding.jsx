@@ -1,10 +1,10 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, ArrowRight, Check, User, Globe, Heart } from 'lucide-react';
 import { createPageUrl } from '@/utils';
 import { base44 } from '@/api/base44Client';
-import VoiceAssistant from '@/components/voice/VoiceAssistant';
+import VoiceButton from '@/components/voice/VoiceButton';
 import LargeButton from '@/components/ui/LargeButton';
 import InterestTag from '@/components/matching/InterestTag';
 import AccessibleCard from '@/components/ui/AccessibleCard';
@@ -31,7 +31,6 @@ const STEPS = [
 
 export default function Onboarding() {
   const navigate = useNavigate();
-  const voiceRef = useRef(null);
   const [currentStep, setCurrentStep] = useState(0);
   const [formData, setFormData] = useState({
     display_name: '',
@@ -72,53 +71,57 @@ export default function Onboarding() {
     }
   };
 
-  const speakCurrentStep = () => {
-    const messages = {
-      0: "What name would you like your new friends to call you?",
-      1: "Select the activities you enjoy. You can pick as many as you like!",
-      2: "What language do you prefer to speak? This helps us find friends who speak the same language."
-    };
-    voiceRef.current?.speak(messages[currentStep]);
-  };
-
   useEffect(() => {
-    const timer = setTimeout(speakCurrentStep, 500);
-    return () => clearTimeout(timer);
+    // Can add TTS later if needed
   }, [currentStep]);
 
   const handleVoiceCommand = (command) => {
-    const lower = command.toLowerCase();
+    const cmd = command.toLowerCase();
+    console.log('Voice command:', cmd);
 
     // Navigation commands
-    if (lower.includes('next') || lower.includes('continue')) {
+    if (cmd.includes('next') || cmd.includes('continue') || cmd.includes('done')) {
       handleNext();
       return;
     }
-    if (lower.includes('back') || lower.includes('previous')) {
+    if (cmd.includes('back') || cmd.includes('previous')) {
       handleBack();
+      return;
+    }
+    if (cmd.includes('home')) {
+      navigate(createPageUrl('Home'));
+      return;
+    }
+
+    // Scroll commands
+    if (cmd.includes('go up') || cmd.includes('scroll up') || cmd === 'up') {
+      window.scrollBy({ top: -300, behavior: 'smooth' });
+      return;
+    }
+    if (cmd.includes('go down') || cmd.includes('scroll down') || cmd === 'down') {
+      window.scrollBy({ top: 300, behavior: 'smooth' });
       return;
     }
 
     // Step-specific handling
     if (currentStep === 0) {
-      // Name step - use the spoken name
-      setFormData(prev => ({ ...prev, display_name: command }));
-      voiceRef.current?.speak(`Nice to meet you, ${command}! Say 'next' when you're ready to continue.`);
+      // Name step - use the spoken name (but not if it's a command)
+      if (!cmd.includes('next') && !cmd.includes('back') && !cmd.includes('up') && !cmd.includes('down')) {
+        setFormData(prev => ({ ...prev, display_name: command }));
+      }
     } 
     else if (currentStep === 1) {
       // Interests step
-      const foundInterest = INTERESTS.find(i => lower.includes(i.toLowerCase()));
+      const foundInterest = INTERESTS.find(i => cmd.includes(i.toLowerCase()));
       if (foundInterest) {
         toggleInterest(foundInterest);
-        voiceRef.current?.speak(`Added ${foundInterest}. Keep adding more or say 'next' to continue.`);
       }
     }
     else if (currentStep === 2) {
       // Language step
-      const foundLanguage = LANGUAGES.find(l => lower.includes(l.toLowerCase()));
+      const foundLanguage = LANGUAGES.find(l => cmd.includes(l.toLowerCase()));
       if (foundLanguage) {
         setFormData(prev => ({ ...prev, language: foundLanguage }));
-        voiceRef.current?.speak(`Great, I've selected ${foundLanguage}. Say 'next' to complete your profile.`);
       }
     }
   };
@@ -173,13 +176,11 @@ export default function Onboarding() {
         console.log('Backend not available, using local storage');
       }
 
-      voiceRef.current?.speak("Wonderful! Your profile is all set. Let's find you some friends!");
       setTimeout(() => {
         navigate(createPageUrl('FindFriends'));
-      }, 2000);
+      }, 1000);
     } catch (error) {
       console.error('Error saving profile:', error);
-      voiceRef.current?.speak("Something went wrong. Let's try again.");
     } finally {
       setIsLoading(false);
     }
@@ -305,14 +306,12 @@ export default function Onboarding() {
           </motion.div>
         </AnimatePresence>
 
-        {/* Voice Assistant */}
-        <div className="mb-8">
-          <VoiceAssistant
-            ref={voiceRef}
-            onCommand={handleVoiceCommand}
-            showButton={true}
-          />
-        </div>
+        {/* Voice Button - Fixed bottom left */}
+        <VoiceButton
+          onCommand={handleVoiceCommand}
+          size="medium"
+          fixed={true}
+        />
 
         {/* Navigation Buttons */}
         <div className="flex justify-between gap-4">

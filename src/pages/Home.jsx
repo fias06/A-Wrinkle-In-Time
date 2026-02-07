@@ -1,17 +1,15 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Users, Gamepad2, Heart, ArrowRight, Sparkles } from 'lucide-react';
 import { createPageUrl } from '@/utils';
 import { base44 } from '@/api/base44Client';
-import VoiceAssistant from '@/components/voice/VoiceAssistant';
 import LargeButton from '@/components/ui/LargeButton';
 import AccessibleCard from '@/components/ui/AccessibleCard';
 
 export default function Home() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [hasProfile, setHasProfile] = useState(false);
-  const voiceRef = useRef(null);
 
   useEffect(() => {
     checkAuth();
@@ -32,22 +30,6 @@ export default function Home() {
       setIsAuthenticated(authenticated);
     } catch (e) {
       setIsAuthenticated(false);
-    }
-  };
-
-  const handleVoiceCommand = (command) => {
-    const lowerCommand = command.toLowerCase();
-    
-    if (lowerCommand.includes('find') || lowerCommand.includes('meet') || lowerCommand.includes('friends')) {
-      window.location.href = createPageUrl('FindFriends');
-    } else if (lowerCommand.includes('profile') || lowerCommand.includes('settings')) {
-      window.location.href = createPageUrl('Profile');
-    } else if (lowerCommand.includes('game') || lowerCommand.includes('play')) {
-      window.location.href = createPageUrl('Game');
-    } else if (lowerCommand.includes('login') || lowerCommand.includes('sign')) {
-      base44.auth.redirectToLogin();
-    } else {
-      voiceRef.current?.speak("I can help you find friends, view your profile, or play games. What would you like to do?");
     }
   };
 
@@ -99,20 +81,6 @@ export default function Home() {
             Connect with wonderful people around the world who share your interests. 
             No typing required – just use your voice!
           </p>
-        </motion.div>
-
-        {/* Voice Assistant */}
-        <motion.div
-          initial={{ opacity: 0, scale: 0.9 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ delay: 0.3, duration: 0.5 }}
-          className="mb-16"
-        >
-          <VoiceAssistant
-            ref={voiceRef}
-            greeting="Hello! Welcome to Golden Connections. I can help you find friends, play games, or set up your profile. Just tap the microphone and tell me what you'd like to do!"
-            onCommand={handleVoiceCommand}
-          />
         </motion.div>
 
         {/* Feature Cards */}

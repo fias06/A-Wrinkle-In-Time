@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { 
@@ -8,7 +8,6 @@ import {
 import { createPageUrl } from '@/utils';
 import { base44 } from '@/api/base44Client';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import VoiceAssistant from '@/components/voice/VoiceAssistant';
 import LargeButton from '@/components/ui/LargeButton';
 import InterestTag from '@/components/matching/InterestTag';
 import { Input } from "@/components/ui/input";
@@ -28,7 +27,6 @@ const LANGUAGES = [
 
 export default function Profile() {
   const navigate = useNavigate();
-  const voiceRef = useRef(null);
   const queryClient = useQueryClient();
   const [isEditing, setIsEditing] = useState(false);
   const [editedProfile, setEditedProfile] = useState(null);
@@ -82,10 +80,8 @@ export default function Profile() {
     onSuccess: () => {
       queryClient.invalidateQueries(['myProfile']);
       setIsEditing(false);
-      voiceRef.current?.speak("Your profile has been updated!");
     },
     onError: () => {
-      voiceRef.current?.speak("Your profile has been saved locally!");
       setIsEditing(false);
     }
   });
@@ -95,33 +91,6 @@ export default function Profile() {
       setEditedProfile(profile);
     }
   }, [profile]);
-
-  const handleVoiceCommand = (command) => {
-    const lower = command.toLowerCase();
-
-    if (lower.includes('edit') || lower.includes('change')) {
-      setIsEditing(true);
-      voiceRef.current?.speak("You can now edit your profile. What would you like to change?");
-    } else if (lower.includes('save')) {
-      handleSave();
-    } else if (lower.includes('cancel')) {
-      setIsEditing(false);
-      setEditedProfile(profile);
-      voiceRef.current?.speak("Changes cancelled.");
-    } else if (lower.includes('logout') || lower.includes('sign out')) {
-      handleLogout();
-    } else if (lower.includes('home')) {
-      navigate(createPageUrl('Home'));
-    } else if (lower.includes('find') || lower.includes('friends')) {
-      navigate(createPageUrl('FindFriends'));
-    } else {
-      // Check for interest additions/removals
-      const foundInterest = INTERESTS.find(i => lower.includes(i.toLowerCase()));
-      if (foundInterest && isEditing) {
-        toggleInterest(foundInterest);
-      }
-    }
-  };
 
   const toggleInterest = (interest) => {
     if (!editedProfile) return;
@@ -140,10 +109,7 @@ export default function Profile() {
   };
 
   const handleLogout = () => {
-    voiceRef.current?.speak("Goodbye! See you soon.");
-    setTimeout(() => {
-      base44.auth.logout(createPageUrl('Home'));
-    }, 1500);
+    base44.auth.logout(createPageUrl('Home'));
   };
 
   const handleImageUpload = async (e) => {
@@ -158,7 +124,6 @@ export default function Profile() {
       // If backend fails, create a local URL
       const localUrl = URL.createObjectURL(file);
       setEditedProfile({ ...editedProfile, avatar_url: localUrl });
-      voiceRef.current?.speak("Photo updated locally.");
     }
   };
 
@@ -188,15 +153,6 @@ export default function Profile() {
           <h1 className="text-4xl md:text-5xl font-bold text-slate-800 mb-4">
             My Profile
           </h1>
-        </div>
-
-        {/* Voice Assistant */}
-        <div className="mb-8">
-          <VoiceAssistant
-            ref={voiceRef}
-            greeting={`Hello ${profile.display_name}! This is your profile. You can say 'edit' to make changes or 'find friends' to meet new people.`}
-            onCommand={handleVoiceCommand}
-          />
         </div>
 
         {/* Profile Card */}

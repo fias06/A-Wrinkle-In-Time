@@ -1,140 +1,268 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Mic, MicOff, Volume2 } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import React, { useState, useEffect, useRef } from 'react';
+import { Mic, MicOff } from 'lucide-react';
 import { cn } from "@/lib/utils";
 
 export default function VoiceButton({ 
   onCommand, 
-  isListening, 
-  setIsListening,
-  size = "large",
-  className 
+  size = "medium",
+  className,
+  fixed = false
 }) {
   const [transcript, setTranscript] = useState('');
-  const [isSpeaking, setIsSpeaking] = useState(false);
-  const [recognition, setRecognition] = useState(null);
+  const [isPaused, setIsPaused] = useState(false);
+  const [isListening, setIsListening] = useState(false);
+  const recognitionRef = useRef(null);
+  const shouldBeListeningRef = useRef(true);
+  const restartTimeoutRef = useRef(null);
+  const onCommandRef = useRef(onCommand);
 
+  // Keep onCommand ref updated without restarting recognition
   useEffect(() => {
-    if (typeof window !== 'undefined' && 'webkitSpeechRecognition' in window) {
-      const SpeechRecognition = window.webkitSpeechRecognition || window.SpeechRecognition;
-      const recognitionInstance = new SpeechRecognition();
-      recognitionInstance.continuous = false;
-      recognitionInstance.interimResults = true;
-      recognitionInstance.lang = 'en-US';
+    onCommandRef.current = onCommand;
+  }, [onCommand]);
 
-      recognitionInstance.onresult = (event) => {
-        const current = event.resultIndex;
-        const result = event.results[current];
-        const text = result[0].transcript;
-        setTranscript(text);
-        
-        if (result.isFinal) {
-          onCommand?.(text.toLowerCase().trim());
-          setTranscript('');
+  // Initialize and keep recognition ALWAYS running - only runs ONCE
+  useEffect(() => {
+    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+      console.log('Speech recognition not supported');
+      return;
+    }
+
+    const SpeechRecognition = window.webkitSpeechRecognition || window.SpeechRecognition;
+    
+    const createRecognition = () => {
+      const recognition = new SpeechRecognition();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = 'en-US';
+      recognition.maxAlternatives = 1;
+
+      recognition.onstart = () => {
+        console.log('🎤 LISTENING - speak now!');
+        setIsListening(true);
+      };
+
+      recognition.onresult = (event) => {
+        let finalTranscript = '';
+        let interimTranscript = '';
+
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const result = event.results[i];
+          if (result.isFinal) {
+            finalTranscript += result[0].transcript;
+          } else {
+            interimTranscript += result[0].transcript;
+          }
+        }
+
+        setTranscript(interimTranscript || finalTranscript);
+
+        if (finalTranscript) {
+          console.log('🗣️ HEARD:', finalTranscript);
+          const command = finalTranscript.toLowerCase().trim();
+          // Use ref to get latest callback without restarting effect
+          onCommandRef.current?.(command);
+          setTimeout(() => setTranscript(''), 2000);
         }
       };
 
-      recognitionInstance.onend = () => {
+      recognition.onend = () => {
+        console.log('🎤 Recognition ended, restarting...');
         setIsListening(false);
+        
+        // ALWAYS restart unless paused
+        if (shouldBeListeningRef.current) {
+          clearTimeout(restartTimeoutRef.current);
+          restartTimeoutRef.current = setTimeout(() => {
+            tryStart();
+          }, 100);
+        }
       };
 
-      recognitionInstance.onerror = () => {
+      recognition.onerror = (event) => {
+        console.log('🎤 Error:', event.error);
         setIsListening(false);
+        
+        // Restart on any error unless paused
+        if (shouldBeListeningRef.current) {
+          const delay = event.error === 'no-speech' ? 100 : 500;
+          clearTimeout(restartTimeoutRef.current);
+          restartTimeoutRef.current = setTimeout(() => {
+            tryStart();
+          }, delay);
+        }
       };
 
-      setRecognition(recognitionInstance);
-    }
-  }, [onCommand, setIsListening]);
+      return recognition;
+    };
 
-  const toggleListening = useCallback(() => {
-    if (!recognition) return;
-    
-    if (isListening) {
-      recognition.stop();
+    const tryStart = () => {
+      if (!shouldBeListeningRef.current) return;
+      
+      try {
+        if (recognitionRef.current) {
+          recognitionRef.current.abort();
+        }
+      } catch (e) {}
+      
+      try {
+        recognitionRef.current = createRecognition();
+        recognitionRef.current.start();
+      } catch (e) {
+        console.log('Start failed, retrying...', e.message);
+        clearTimeout(restartTimeoutRef.current);
+        restartTimeoutRef.current = setTimeout(tryStart, 300);
+      }
+    };
+
+    // Start immediately
+    shouldBeListeningRef.current = true;
+    tryStart();
+
+    return () => {
+      shouldBeListeningRef.current = false;
+      clearTimeout(restartTimeoutRef.current);
+      try {
+        recognitionRef.current?.abort();
+      } catch (e) {}
+    };
+  }, []); // Empty array - only run once on mount
+
+  const togglePause = () => {
+    const newPaused = !isPaused;
+    setIsPaused(newPaused);
+    shouldBeListeningRef.current = !newPaused;
+
+    if (newPaused) {
+      // Stop listening
+      clearTimeout(restartTimeoutRef.current);
+      try {
+        recognitionRef.current?.abort();
+      } catch (e) {}
       setIsListening(false);
     } else {
-      recognition.start();
-      setIsListening(true);
+      // Resume listening - recreate and start
+      const SpeechRecognition = window.webkitSpeechRecognition || window.SpeechRecognition;
+      
+      const createAndStart = () => {
+        try {
+          const recognition = new SpeechRecognition();
+          recognition.continuous = true;
+          recognition.interimResults = true;
+          recognition.lang = 'en-US';
+          
+          recognition.onstart = () => {
+            console.log('🎤 RESUMED LISTENING!');
+            setIsListening(true);
+          };
+          
+          recognition.onresult = (event) => {
+            let finalTranscript = '';
+            let interimTranscript = '';
+            for (let i = event.resultIndex; i < event.results.length; i++) {
+              if (event.results[i].isFinal) {
+                finalTranscript += event.results[i][0].transcript;
+              } else {
+                interimTranscript += event.results[i][0].transcript;
+              }
+            }
+            setTranscript(interimTranscript || finalTranscript);
+            if (finalTranscript) {
+              console.log('🗣️ HEARD:', finalTranscript);
+              onCommand?.(finalTranscript.toLowerCase().trim());
+              setTimeout(() => setTranscript(''), 2000);
+            }
+          };
+          
+          recognition.onend = () => {
+            setIsListening(false);
+            if (shouldBeListeningRef.current) {
+              setTimeout(createAndStart, 100);
+            }
+          };
+          
+          recognition.onerror = () => {
+            setIsListening(false);
+            if (shouldBeListeningRef.current) {
+              setTimeout(createAndStart, 300);
+            }
+          };
+          
+          recognitionRef.current = recognition;
+          recognition.start();
+        } catch (e) {
+          if (shouldBeListeningRef.current) {
+            setTimeout(createAndStart, 300);
+          }
+        }
+      };
+      
+      createAndStart();
     }
-  }, [recognition, isListening, setIsListening]);
+  };
 
   const sizeClasses = {
-    small: "w-16 h-16",
-    medium: "w-20 h-20",
-    large: "w-28 h-28"
+    small: "w-12 h-12",
+    medium: "w-14 h-14",
+    large: "w-20 h-20"
   };
 
   const iconSizes = {
-    small: "w-7 h-7",
-    medium: "w-9 h-9",
-    large: "w-12 h-12"
+    small: "w-5 h-5",
+    medium: "w-6 h-6",
+    large: "w-9 h-9"
   };
 
-  return (
-    <div className={cn("flex flex-col items-center gap-4", className)}>
-      <motion.button
-        onClick={toggleListening}
+  const buttonContent = (
+    <>
+      <button
+        onClick={togglePause}
         className={cn(
-          "relative rounded-full flex items-center justify-center transition-all",
-          "focus:outline-none focus:ring-4 focus:ring-amber-400 focus:ring-offset-4",
+          "rounded-full flex items-center justify-center transition-all shadow-lg",
           sizeClasses[size],
-          isListening 
-            ? "bg-gradient-to-br from-rose-500 to-rose-600 shadow-2xl shadow-rose-500/50" 
-            : "bg-gradient-to-br from-amber-500 to-amber-600 shadow-xl shadow-amber-500/40 hover:shadow-2xl hover:shadow-amber-500/50"
+          isListening && !isPaused
+            ? "bg-green-500 hover:bg-green-600 animate-pulse" 
+            : isPaused
+            ? "bg-gray-400 hover:bg-gray-500"
+            : "bg-yellow-500 hover:bg-yellow-600 animate-pulse"
         )}
-        whileTap={{ scale: 0.95 }}
-        whileHover={{ scale: 1.05 }}
-        aria-label={isListening ? "Stop listening" : "Start voice command"}
+        aria-label={isPaused ? "Resume listening" : "Pause listening"}
       >
-        {/* Pulsing rings when listening */}
-        <AnimatePresence>
-          {isListening && (
-            <>
-              <motion.div
-                initial={{ scale: 1, opacity: 0.6 }}
-                animate={{ scale: 1.5, opacity: 0 }}
-                transition={{ duration: 1.5, repeat: Infinity }}
-                className="absolute inset-0 rounded-full bg-rose-400"
-              />
-              <motion.div
-                initial={{ scale: 1, opacity: 0.4 }}
-                animate={{ scale: 1.8, opacity: 0 }}
-                transition={{ duration: 1.5, repeat: Infinity, delay: 0.3 }}
-                className="absolute inset-0 rounded-full bg-rose-400"
-              />
-            </>
-          )}
-        </AnimatePresence>
-
-        {isListening ? (
-          <MicOff className={cn("text-white relative z-10", iconSizes[size])} />
+        {isPaused ? (
+          <MicOff className={cn("text-white", iconSizes[size])} />
         ) : (
-          <Mic className={cn("text-white relative z-10", iconSizes[size])} />
+          <Mic className={cn("text-white", iconSizes[size])} />
         )}
-      </motion.button>
+      </button>
 
-      {/* Transcript display */}
-      <AnimatePresence>
-        {transcript && (
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="bg-slate-800 text-white px-6 py-3 rounded-2xl text-xl font-medium shadow-lg"
-          >
-            "{transcript}"
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Helper text */}
-      <p className={cn(
-        "text-center font-medium",
-        size === "large" ? "text-xl" : "text-lg",
-        isListening ? "text-rose-600" : "text-slate-600"
+      {/* Status */}
+      <span className={cn(
+        "text-xs font-medium whitespace-nowrap",
+        isListening && !isPaused ? "text-green-600" : isPaused ? "text-gray-500" : "text-yellow-600"
       )}>
-        {isListening ? "I'm listening..." : "Tap to speak"}
-      </p>
+        {isPaused ? "Paused" : isListening ? "Listening..." : "Starting..."}
+      </span>
+
+      {/* Transcript bubble */}
+      {transcript && (
+        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 bg-black/90 text-white px-3 py-2 rounded-lg text-sm max-w-[250px] whitespace-nowrap overflow-hidden text-ellipsis">
+          🎤 "{transcript}"
+        </div>
+      )}
+    </>
+  );
+
+  if (fixed) {
+    return (
+      <div className="fixed bottom-6 left-6 z-50 flex flex-col items-center gap-1">
+        {buttonContent}
+      </div>
+    );
+  }
+
+  return (
+    <div className={cn("relative flex flex-col items-center gap-1", className)}>
+      {buttonContent}
     </div>
   );
 }

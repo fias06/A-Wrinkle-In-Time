@@ -1,14 +1,16 @@
-import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 import { base44 } from '@/api/base44Client';
 import { Home, Users, Gamepad2, User, Menu, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from "@/lib/utils";
+import VoiceButton from '@/components/voice/VoiceButton';
 
 export default function Layout({ children, currentPageName }) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const navigate = useNavigate();
 
   useEffect(() => {
     checkAuth();
@@ -18,6 +20,56 @@ export default function Layout({ children, currentPageName }) {
     const auth = await base44.auth.isAuthenticated();
     setIsAuthenticated(auth);
   };
+
+  // Global voice command handler
+  const handleGlobalVoiceCommand = useCallback((command) => {
+    const cmd = command.toLowerCase();
+    console.log('🎤 Global command:', cmd);
+
+    // Navigation commands
+    if (cmd.includes('home') || cmd.includes('main')) {
+      navigate(createPageUrl('Home'));
+    } else if (cmd.includes('find') || cmd.includes('friends') || cmd.includes('connect')) {
+      navigate(createPageUrl('FindFriends'));
+    } else if (cmd.includes('game') || cmd.includes('play')) {
+      navigate(createPageUrl('Game'));
+    } else if (cmd.includes('profile') || cmd.includes('settings')) {
+      navigate(createPageUrl('Profile'));
+    } else if (cmd.includes('video') || cmd.includes('call')) {
+      navigate(createPageUrl('VideoCall'));
+    }
+    // Scroll commands
+    else if (cmd.includes('scroll up') || cmd.includes('go up')) {
+      window.scrollBy({ top: -400, behavior: 'smooth' });
+    } else if (cmd.includes('scroll down') || cmd.includes('go down')) {
+      window.scrollBy({ top: 400, behavior: 'smooth' });
+    } else if (cmd === 'up') {
+      window.scrollBy({ top: -300, behavior: 'smooth' });
+    } else if (cmd === 'down') {
+      window.scrollBy({ top: 300, behavior: 'smooth' });
+    } else if (cmd.includes('top') || cmd.includes('beginning')) {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } else if (cmd.includes('bottom') || cmd.includes('end')) {
+      window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+    }
+    // Click commands
+    else if (cmd.includes('click') || cmd.includes('press') || cmd.includes('tap')) {
+      const buttons = document.querySelectorAll('button, a, [role="button"]');
+      for (const btn of buttons) {
+        const text = btn.textContent?.toLowerCase() || '';
+        const label = btn.getAttribute('aria-label')?.toLowerCase() || '';
+        if (text.includes(cmd.replace(/click|press|tap/g, '').trim()) ||
+            label.includes(cmd.replace(/click|press|tap/g, '').trim())) {
+          btn.click();
+          return;
+        }
+      }
+    }
+    // Back command
+    else if (cmd.includes('back') || cmd.includes('previous')) {
+      window.history.back();
+    }
+  }, [navigate]);
 
   // Pages without navigation
   const hideNav = ['VideoCall', 'Onboarding'].includes(currentPageName);
@@ -147,6 +199,14 @@ export default function Layout({ children, currentPageName }) {
 
       {/* Spacer for bottom nav on mobile */}
       <div className="md:hidden h-24" />
+
+      {/* Global Fixed Voice Button - Bottom Left */}
+      <VoiceButton 
+        onCommand={handleGlobalVoiceCommand}
+        size="medium"
+        className=""
+        fixed={true}
+      />
     </div>
   );
 }

@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Video, VideoOff, Mic, MicOff, PhoneOff, ArrowLeft, Users, Gamepad2, MessageCircle } from 'lucide-react';
 import { createPageUrl } from '@/utils';
-import VoiceAssistant from '@/components/voice/VoiceAssistant';
+import VoiceButton from '@/components/voice/VoiceButton';
 import LargeButton from '@/components/ui/LargeButton';
 import CoopGame from '@/components/game/CoopGame';
 
@@ -13,7 +13,6 @@ export default function VideoCall() {
   const partnerName = searchParams.get('userName') || 'Friend';
   const partnerId = searchParams.get('userId');
   
-  const voiceRef = useRef(null);
   const localVideoRef = useRef(null);
   const [localStream, setLocalStream] = useState(null);
   const [isVideoOn, setIsVideoOn] = useState(true);
@@ -65,7 +64,6 @@ export default function VideoCall() {
     const timer = setTimeout(() => {
       setIsConnecting(false);
       setIsConnected(true);
-      voiceRef.current?.speak(`Connected with ${partnerName}!`);
     }, 2500);
     
     return () => clearTimeout(timer);
@@ -109,28 +107,38 @@ export default function VideoCall() {
   };
 
   const handleVoiceCommand = (command) => {
-    const lower = command.toLowerCase();
+    const cmd = command.toLowerCase();
+    console.log('Voice command:', cmd);
 
-    if (lower.includes('mute')) {
+    // Mute/unmute
+    if (cmd.includes('mute') && !cmd.includes('unmute')) {
       if (!isMuted) toggleMute();
-      voiceRef.current?.speak("Microphone muted.");
-    } else if (lower.includes('unmute')) {
+    } else if (cmd.includes('unmute')) {
       if (isMuted) toggleMute();
-      voiceRef.current?.speak("Microphone unmuted.");
-    } else if (lower.includes('video off') || lower.includes('hide video') || lower.includes('camera off')) {
+    }
+    // Video on/off
+    else if (cmd.includes('video off') || cmd.includes('camera off') || cmd.includes('hide')) {
       if (isVideoOn) toggleVideo();
-      voiceRef.current?.speak("Video turned off.");
-    } else if (lower.includes('video on') || lower.includes('show video') || lower.includes('camera on')) {
+    } else if (cmd.includes('video on') || cmd.includes('camera on') || cmd.includes('show')) {
       if (!isVideoOn) toggleVideo();
-      voiceRef.current?.speak("Video turned on.");
-    } else if (lower.includes('end') || lower.includes('hang up') || lower.includes('disconnect')) {
+    }
+    // End call
+    else if (cmd.includes('end') || cmd.includes('hang up') || cmd.includes('leave') || cmd.includes('bye')) {
       handleEndCall();
-    } else if (lower.includes('game') || lower.includes('play')) {
+    }
+    // Game
+    else if (cmd.includes('game') || cmd.includes('play')) {
       setShowGame(true);
-      voiceRef.current?.speak("Opening the game!");
-    } else if (lower.includes('close game')) {
+    } else if (cmd.includes('close game') || cmd.includes('stop game')) {
       setShowGame(false);
-      voiceRef.current?.speak("Game closed.");
+    }
+    // Navigation
+    else if (cmd.includes('home')) {
+      if (localStream) localStream.getTracks().forEach(t => t.stop());
+      navigate(createPageUrl('Home'));
+    } else if (cmd.includes('friends') || cmd.includes('find')) {
+      if (localStream) localStream.getTracks().forEach(t => t.stop());
+      navigate(createPageUrl('FindFriends'));
     }
   };
 
@@ -140,10 +148,7 @@ export default function VideoCall() {
       localStream.getTracks().forEach(track => track.stop());
     }
     
-    voiceRef.current?.speak("Ending call. Goodbye!");
-    setTimeout(() => {
-      navigate(createPageUrl('FindFriends'));
-    }, 1500);
+    navigate(createPageUrl('FindFriends'));
   };
 
   return (
@@ -280,17 +285,12 @@ export default function VideoCall() {
           </motion.div>
         )}
 
-        {/* Voice Assistant - Small, top left corner */}
-        {!showGame && (
-          <div className="absolute top-20 left-4 z-10 scale-75 origin-top-left">
-            <VoiceAssistant
-              ref={voiceRef}
-              greeting={isConnected ? `You're connected with ${partnerName}. Say 'mute' to mute, 'end call' to hang up, or 'play game' to start a game together!` : ''}
-              onCommand={handleVoiceCommand}
-              compact
-            />
-          </div>
-        )}
+        {/* Voice Button - Fixed bottom left */}
+        <VoiceButton
+          onCommand={handleVoiceCommand}
+          size="medium"
+          fixed={true}
+        />
 
         {/* Controls */}
         <motion.div

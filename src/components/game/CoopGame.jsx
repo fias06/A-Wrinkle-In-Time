@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState, useCallback } from 'react';
+import React, { useRef, useEffect, useState, useCallback, useImperativeHandle, forwardRef } from 'react';
 import { motion } from 'framer-motion';
 import { Play, Pause, RotateCcw, ChevronUp, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from "@/lib/utils";
@@ -11,12 +11,12 @@ const GRAVITY = 0.5;
 const JUMP_FORCE = -12;
 const MOVE_SPEED = 5;
 
-export default function CoopGame({ 
+const CoopGame = forwardRef(function CoopGame({ 
   isPlayer1, 
   onGameAction,
   remoteAction,
   className 
-}) {
+}, ref) {
   const canvasRef = useRef(null);
   const animationRef = useRef(null);
   const [isPaused, setIsPaused] = useState(false);
@@ -297,6 +297,19 @@ export default function CoopGame({
     });
   };
 
+  // Expose voice action handler via ref
+  useImperativeHandle(ref, () => ({
+    handleVoiceAction: (action) => {
+      if (action === 'jump' || action === 'left' || action === 'right') {
+        handleAction(action);
+      } else if (action === 'pause') {
+        setIsPaused(p => !p);
+      } else if (action === 'reset') {
+        resetGame();
+      }
+    }
+  }));
+
   const myColor = isPlayer1 ? 'amber' : 'violet';
 
   return (
@@ -394,4 +407,6 @@ export default function CoopGame({
       </div>
     </div>
   );
-}
+});
+
+export default CoopGame;
