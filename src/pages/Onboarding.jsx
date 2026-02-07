@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, ArrowRight, Check, User, Globe, Heart } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check, User, Globe, Heart, Music } from 'lucide-react';
 import { createPageUrl } from '@/utils';
 import { base44 } from '@/api/base44Client';
 import VoiceButton from '@/components/voice/VoiceButton';
@@ -23,9 +23,21 @@ const LANGUAGES = [
   'Hindi', 'Russian', 'Dutch', 'Polish', 'Swedish'
 ];
 
+const MUSIC_GENRES = [
+  { id: 'pop', name: 'Pop', emoji: '🎵' },
+  { id: 'rock', name: 'Rock', emoji: '🎸' },
+  { id: 'jazz', name: 'Jazz', emoji: '🎷' },
+  { id: 'classical', name: 'Classical', emoji: '🎻' },
+  { id: 'country', name: 'Country', emoji: '🤠' },
+  { id: 'bollywood', name: 'Bollywood', emoji: '💃' },
+  { id: 'lofi', name: 'Lo-Fi / Chill', emoji: '☕' },
+  { id: 'electronic', name: 'Electronic', emoji: '🎧' },
+];
+
 const STEPS = [
   { id: 'name', title: 'What should we call you?', icon: User },
   { id: 'interests', title: 'What do you enjoy?', icon: Heart },
+  { id: 'music', title: 'What music do you like?', icon: Music },
   { id: 'language', title: 'What language do you speak?', icon: Globe },
 ];
 
@@ -35,6 +47,7 @@ export default function Onboarding() {
   const [formData, setFormData] = useState({
     display_name: '',
     interests: [],
+    music_genre: '',
     language: '',
     bio: ''
   });
@@ -118,6 +131,13 @@ export default function Onboarding() {
       }
     }
     else if (currentStep === 2) {
+      // Music genre step
+      const foundGenre = MUSIC_GENRES.find(g => cmd.includes(g.name.toLowerCase()) || cmd.includes(g.id));
+      if (foundGenre) {
+        setFormData(prev => ({ ...prev, music_genre: foundGenre.id }));
+      }
+    }
+    else if (currentStep === 3) {
       // Language step
       const foundLanguage = LANGUAGES.find(l => cmd.includes(l.toLowerCase()));
       if (foundLanguage) {
@@ -190,7 +210,8 @@ export default function Onboarding() {
     switch (currentStep) {
       case 0: return formData.display_name.trim().length > 0;
       case 1: return formData.interests.length > 0;
-      case 2: return formData.language.length > 0;
+      case 2: return formData.music_genre.length > 0;
+      case 3: return formData.language.length > 0;
       default: return true;
     }
   };
@@ -284,6 +305,28 @@ export default function Onboarding() {
             )}
 
             {currentStep === 2 && (
+              <div>
+                <p className="text-center text-lg text-slate-600 mb-6">
+                  Choose your favorite music for games! Or say it aloud.
+                </p>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 max-w-3xl mx-auto">
+                  {MUSIC_GENRES.map((genre) => (
+                    <AccessibleCard
+                      key={genre.id}
+                      selected={formData.music_genre === genre.id}
+                      onClick={() => setFormData(prev => ({ ...prev, music_genre: genre.id }))}
+                      ariaLabel={genre.name}
+                      className="text-center py-6"
+                    >
+                      <span className="text-4xl mb-2 block">{genre.emoji}</span>
+                      <span className="text-lg font-semibold">{genre.name}</span>
+                    </AccessibleCard>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {currentStep === 3 && (
               <div>
                 <p className="text-center text-lg text-slate-600 mb-6">
                   Tap your preferred language or say it aloud
