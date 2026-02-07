@@ -280,9 +280,9 @@ export default function VideoCall() {
           </motion.div>
         )}
 
-        {/* Voice Assistant - Hidden during game */}
+        {/* Voice Assistant - Small, top left corner */}
         {!showGame && (
-          <div className="absolute bottom-44 left-4 right-4 z-10">
+          <div className="absolute top-20 left-4 z-10 scale-75 origin-top-left">
             <VoiceAssistant
               ref={voiceRef}
               greeting={isConnected ? `You're connected with ${partnerName}. Say 'mute' to mute, 'end call' to hang up, or 'play game' to start a game together!` : ''}
@@ -298,7 +298,7 @@ export default function VideoCall() {
           animate={{ opacity: 1, y: 0 }}
           className="absolute bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-black/90 via-black/70 to-transparent"
         >
-          <div className="max-w-lg mx-auto">
+          <div className="max-w-2xl mx-auto">
             {/* Status indicators */}
             <div className="flex justify-center gap-4 mb-4 text-sm">
               {isMuted && (
@@ -313,51 +313,71 @@ export default function VideoCall() {
               )}
             </div>
             
-            {/* Control buttons */}
-            <div className="flex items-center justify-center gap-4">
-              <LargeButton
-                onClick={toggleMute}
-                variant={isMuted ? "danger" : "secondary"}
-                icon={isMuted ? MicOff : Mic}
-                disabled={false}
-                className="!rounded-full !w-16 !h-16"
-                ariaLabel={isMuted ? "Unmute microphone" : "Mute microphone"}
-              >
-                {""}
-              </LargeButton>
+            {/* Control buttons with labels */}
+            <div className="flex items-center justify-center gap-6">
+              <div className="flex flex-col items-center gap-2">
+                <button
+                  onClick={toggleMute}
+                  className={`w-16 h-16 rounded-full flex items-center justify-center transition-all ${
+                    isMuted 
+                      ? 'bg-red-500 hover:bg-red-600 text-white' 
+                      : 'bg-slate-600 hover:bg-slate-500 text-white'
+                  }`}
+                  aria-label={isMuted ? "Unmute microphone" : "Mute microphone"}
+                >
+                  {isMuted ? <MicOff className="w-7 h-7" /> : <Mic className="w-7 h-7" />}
+                </button>
+                <span className="text-white text-sm font-medium">
+                  {isMuted ? 'Unmute' : 'Mute'}
+                </span>
+              </div>
 
-              <LargeButton
-                onClick={toggleVideo}
-                variant={!isVideoOn ? "danger" : "secondary"}
-                icon={isVideoOn ? Video : VideoOff}
-                disabled={!!cameraError}
-                className="!rounded-full !w-16 !h-16"
-                ariaLabel={isVideoOn ? "Turn off video" : "Turn on video"}
-              >
-                {""}
-              </LargeButton>
+              <div className="flex flex-col items-center gap-2">
+                <button
+                  onClick={toggleVideo}
+                  disabled={!!cameraError}
+                  className={`w-16 h-16 rounded-full flex items-center justify-center transition-all ${
+                    !isVideoOn 
+                      ? 'bg-red-500 hover:bg-red-600 text-white' 
+                      : 'bg-slate-600 hover:bg-slate-500 text-white'
+                  } ${cameraError ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  aria-label={isVideoOn ? "Turn off video" : "Turn on video"}
+                >
+                  {isVideoOn ? <Video className="w-7 h-7" /> : <VideoOff className="w-7 h-7" />}
+                </button>
+                <span className="text-white text-sm font-medium">
+                  {isVideoOn ? 'Video Off' : 'Video On'}
+                </span>
+              </div>
 
-              <LargeButton
-                onClick={() => setShowGame(!showGame)}
-                variant={showGame ? "secondary" : "primary"}
-                icon={Gamepad2}
-                disabled={!isConnected}
-                className="!rounded-full !w-16 !h-16"
-                ariaLabel="Play game together"
-              >
-                {""}
-              </LargeButton>
+              <div className="flex flex-col items-center gap-2">
+                <button
+                  onClick={() => setShowGame(!showGame)}
+                  disabled={!isConnected}
+                  className={`w-16 h-16 rounded-full flex items-center justify-center transition-all ${
+                    showGame 
+                      ? 'bg-slate-600 hover:bg-slate-500 text-white' 
+                      : 'bg-amber-500 hover:bg-amber-600 text-white'
+                  } ${!isConnected ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  aria-label="Play game together"
+                >
+                  <Gamepad2 className="w-7 h-7" />
+                </button>
+                <span className="text-white text-sm font-medium">
+                  {showGame ? 'Close Game' : 'Play Game'}
+                </span>
+              </div>
 
-              <LargeButton
-                onClick={handleEndCall}
-                variant="danger"
-                icon={PhoneOff}
-                disabled={false}
-                className="!rounded-full !w-20 !h-16"
-                ariaLabel="End call"
-              >
-                {""}
-              </LargeButton>
+              <div className="flex flex-col items-center gap-2">
+                <button
+                  onClick={handleEndCall}
+                  className="w-20 h-16 rounded-full flex items-center justify-center bg-red-600 hover:bg-red-700 text-white transition-all"
+                  aria-label="End call"
+                >
+                  <PhoneOff className="w-7 h-7" />
+                </button>
+                <span className="text-white text-sm font-medium">End Call</span>
+              </div>
             </div>
           </div>
         </motion.div>
