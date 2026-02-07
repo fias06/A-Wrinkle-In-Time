@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, ArrowRight, Check, User, Globe, Heart, Music } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check, User, Globe, Heart, Music, Camera, RefreshCw } from 'lucide-react';
 import { createPageUrl } from '@/utils';
 import { base44 } from '@/api/base44Client';
 import VoiceButton from '@/components/voice/VoiceButton';
@@ -35,6 +35,7 @@ const MUSIC_GENRES = [
 ];
 
 const STEPS = [
+  { id: 'photo', title: 'Let\'s create your avatar!', icon: Camera },
   { id: 'name', title: 'What should we call you?', icon: User },
   { id: 'interests', title: 'What do you enjoy?', icon: Heart },
   { id: 'music', title: 'What music do you like?', icon: Music },
@@ -49,9 +50,181 @@ export default function Onboarding() {
     interests: [],
     music_genre: '',
     language: '',
-    bio: ''
+    bio: '',
+    avatar_url: ''
   });
   const [isLoading, setIsLoading] = useState(false);
+  
+  // Camera state
+  const videoRef = useRef(null);
+  const canvasRef = useRef(null);
+  const [cameraActive, setCameraActive] = useState(false);
+  const [capturedPhoto, setCapturedPhoto] = useState(null);
+  const [cartoonAvatar, setCartoonAvatar] = useState(null);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const streamRef = useRef(null);
+
+  // Start camera
+  const startCamera = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        video: { facingMode: 'user', width: 640, height: 480 } 
+      });
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.play();
+      }
+      setCameraActive(true);
+    } catch (err) {
+      console.error('Camera error:', err);
+      alert('Could not access camera. Please allow camera permissions.');
+    }
+  };
+
+  // Stop camera
+  const stopCamera = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+    setCameraActive(false);
+  };
+
+  // Apply cartoon/caricature effect
+  const applyCartoonEffect = (imageData) => {
+    const data = imageData.data;
+    const width = imageData.width;
+    const height = imageData.height;
+    
+    // Step 1: Posterize (reduce colors)
+    const levels = 6;
+    for (let i = 0; i < data.length; i += 4) {
+      data[i] = Math.round(data[i] / (256 / levels)) * (256 / levels);     // R
+      data[i + 1] = Math.round(data[i + 1] / (256 / levels)) * (256 / levels); // G
+      data[i + 2] = Math.round(data[i + 2] / (256 / levels)) * (256 / levels); // B
+    }
+    
+    // Step 2: Increase saturation and add warm tint for cartoon look
+    for (let i = 0; i < data.length; i += 4) {
+      const r = data[i];
+      const g = data[i + 1];
+      const b = data[i + 2];
+      
+      // Convert to HSL-like boost
+      const avg = (r + g + b) / 3;
+      const boost = 1.4;
+      
+      data[i] = Math.min(255, avg + (r - avg) * boost + 15);     // R with warm tint
+      data[i + 1] = Math.min(255, avg + (g - avg) * boost + 5);  // G
+      data[i + 2] = Math.min(255, avg + (b - avg) * boost - 10); // B slightly reduced
+    }
+    
+    // Step 3: Edge enhancement for cartoon outline effect
+    const tempData = new Uint8ClampedArray(data);
+    for (let y = 1; y < height - 1; y++) {
+      for (let x = 1; x < width - 1; x++) {
+        const idx = (y * width + x) * 4;
+        
+        // Simple edge detection
+        const leftIdx = (y * width + (x - 1)) * 4;
+        const rightIdx = (y * width + (x + 1)) * 4;
+        const topIdx = ((y - 1) * width + x) * 4;
+        const bottomIdx = ((y + 1) * width + x) * 4;
+        
+        const gx = Math.abs(tempData[rightIdx] - tempData[leftIdx]);
+        const gy = Math.abs(tempData[bottomIdx] - tempData[topIdx]);
+        const edge = gx + gy;
+        
+        // Darken edges
+        if (edge > 30) {
+          const darkFactor = Math.min(1, edge / 100);
+          data[idx] = Math.max(0, data[idx] - 50 * darkFactor);
+          data[idx + 1] = Math.max(0, data[idx + 1] - 50 * darkFactor);
+          data[idx + 2] = Math.max(0, data[idx + 2] - 50 * darkFactor);
+        }
+      }
+    }
+    
+    return imageData;
+  };
+
+  // Capture photo and create cartoon avatar
+  const capturePhoto = () => {
+    if (!videoRef.current || !canvasRef.current) return;
+    
+    setIsProcessing(true);
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    
+    // Set canvas size
+    canvas.width = 300;
+    canvas.height = 300;
+    
+    // Calculate crop for square (center crop)
+    const size = Math.min(video.videoWidth, video.videoHeight);
+    const startX = (video.videoWidth - size) / 2;
+    const startY = (video.videoHeight - size) / 2;
+    
+    // Draw cropped and scaled video frame
+    ctx.drawImage(video, startX, startY, size, size, 0, 0, 300, 300);
+    
+    // Save original capture
+    const originalDataUrl = canvas.toDataURL('image/png');
+    setCapturedPhoto(originalDataUrl);
+    
+    // Apply cartoon effect
+    const imageData = ctx.getImageData(0, 0, 300, 300);
+    const cartoonImageData = applyCartoonEffect(imageData);
+    ctx.putImageData(cartoonImageData, 0, 0);
+    
+    // Add circular mask with border
+    ctx.globalCompositeOperation = 'destination-in';
+    ctx.beginPath();
+    ctx.arc(150, 150, 145, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Add colorful border
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.strokeStyle = '#f59e0b';
+    ctx.lineWidth = 8;
+    ctx.beginPath();
+    ctx.arc(150, 150, 145, 0, Math.PI * 2);
+    ctx.stroke();
+    
+    // Get final cartoon avatar
+    const cartoonDataUrl = canvas.toDataURL('image/png');
+    setCartoonAvatar(cartoonDataUrl);
+    setFormData(prev => ({ ...prev, avatar_url: cartoonDataUrl }));
+    
+    setIsProcessing(false);
+    stopCamera();
+  };
+
+  // Retake photo
+  const retakePhoto = () => {
+    setCapturedPhoto(null);
+    setCartoonAvatar(null);
+    setFormData(prev => ({ ...prev, avatar_url: '' }));
+    startCamera();
+  };
+
+  // Clean up camera on unmount
+  useEffect(() => {
+    return () => {
+      stopCamera();
+    };
+  }, []);
+
+  // Auto-start camera when on photo step
+  useEffect(() => {
+    if (currentStep === 0 && !cartoonAvatar) {
+      startCamera();
+    } else if (currentStep !== 0) {
+      stopCamera();
+    }
+  }, [currentStep]);
 
   useEffect(() => {
     loadExistingProfile();
@@ -118,26 +291,34 @@ export default function Onboarding() {
 
     // Step-specific handling
     if (currentStep === 0) {
+      // Photo step - voice commands for capture
+      if (cmd.includes('capture') || cmd.includes('take') || cmd.includes('photo') || cmd.includes('picture') || cmd.includes('cheese')) {
+        capturePhoto();
+      } else if (cmd.includes('retake') || cmd.includes('again') || cmd.includes('redo')) {
+        retakePhoto();
+      }
+    }
+    else if (currentStep === 1) {
       // Name step - use the spoken name (but not if it's a command)
       if (!cmd.includes('next') && !cmd.includes('back') && !cmd.includes('up') && !cmd.includes('down')) {
         setFormData(prev => ({ ...prev, display_name: command }));
       }
     } 
-    else if (currentStep === 1) {
+    else if (currentStep === 2) {
       // Interests step
       const foundInterest = INTERESTS.find(i => cmd.includes(i.toLowerCase()));
       if (foundInterest) {
         toggleInterest(foundInterest);
       }
     }
-    else if (currentStep === 2) {
+    else if (currentStep === 3) {
       // Music genre step
       const foundGenre = MUSIC_GENRES.find(g => cmd.includes(g.name.toLowerCase()) || cmd.includes(g.id));
       if (foundGenre) {
         setFormData(prev => ({ ...prev, music_genre: foundGenre.id }));
       }
     }
-    else if (currentStep === 3) {
+    else if (currentStep === 4) {
       // Language step
       const foundLanguage = LANGUAGES.find(l => cmd.includes(l.toLowerCase()));
       if (foundLanguage) {
@@ -208,10 +389,11 @@ export default function Onboarding() {
 
   const canProceed = () => {
     switch (currentStep) {
-      case 0: return formData.display_name.trim().length > 0;
-      case 1: return formData.interests.length > 0;
-      case 2: return formData.music_genre.length > 0;
-      case 3: return formData.language.length > 0;
+      case 0: return cartoonAvatar !== null; // Photo step - need avatar
+      case 1: return formData.display_name.trim().length > 0;
+      case 2: return formData.interests.length > 0;
+      case 3: return formData.music_genre.length > 0;
+      case 4: return formData.language.length > 0;
       default: return true;
     }
   };
@@ -271,6 +453,76 @@ export default function Onboarding() {
 
             {/* Step-specific content */}
             {currentStep === 0 && (
+              <div className="flex flex-col items-center">
+                <canvas ref={canvasRef} className="hidden" />
+                
+                {!cartoonAvatar ? (
+                  <>
+                    {/* Camera View */}
+                    <div className="relative w-72 h-72 rounded-full overflow-hidden border-8 border-amber-300 shadow-2xl mb-6 bg-slate-800">
+                      <video
+                        ref={videoRef}
+                        autoPlay
+                        playsInline
+                        muted
+                        className="w-full h-full object-cover scale-125"
+                        style={{ transform: 'scaleX(-1)' }}
+                      />
+                      {!cameraActive && (
+                        <div className="absolute inset-0 flex items-center justify-center bg-slate-800">
+                          <Camera className="w-20 h-20 text-slate-500" />
+                        </div>
+                      )}
+                    </div>
+                    
+                    <p className="text-center text-lg text-slate-600 mb-6">
+                      Position your face in the circle and tap capture!
+                    </p>
+                    
+                    <LargeButton
+                      onClick={capturePhoto}
+                      variant="primary"
+                      icon={Camera}
+                      disabled={!cameraActive || isProcessing}
+                    >
+                      {isProcessing ? 'Creating Avatar...' : 'Capture Photo'}
+                    </LargeButton>
+                    
+                    <p className="text-center text-slate-500 mt-4">
+                      Or say "cheese" or "capture"
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    {/* Show cartoon avatar */}
+                    <div className="relative mb-6">
+                      <img
+                        src={cartoonAvatar}
+                        alt="Your cartoon avatar"
+                        className="w-72 h-72 rounded-full shadow-2xl"
+                      />
+                      <div className="absolute -bottom-2 -right-2 bg-emerald-500 text-white px-4 py-2 rounded-full text-lg font-bold">
+                        ✨ Your Avatar!
+                      </div>
+                    </div>
+                    
+                    <p className="text-center text-xl text-slate-700 font-medium mb-4">
+                      Looking great! This will be your profile picture.
+                    </p>
+                    
+                    <LargeButton
+                      onClick={retakePhoto}
+                      variant="outline"
+                      icon={RefreshCw}
+                    >
+                      Retake Photo
+                    </LargeButton>
+                  </>
+                )}
+              </div>
+            )}
+
+            {currentStep === 1 && (
               <div className="max-w-md mx-auto">
                 <Input
                   type="text"
@@ -286,7 +538,7 @@ export default function Onboarding() {
               </div>
             )}
 
-            {currentStep === 1 && (
+            {currentStep === 2 && (
               <div>
                 <p className="text-center text-lg text-slate-600 mb-6">
                   Tap your interests or say them aloud (selected: {formData.interests.length})
@@ -304,7 +556,7 @@ export default function Onboarding() {
               </div>
             )}
 
-            {currentStep === 2 && (
+            {currentStep === 3 && (
               <div>
                 <p className="text-center text-lg text-slate-600 mb-6">
                   Choose your favorite music for games! Or say it aloud.
@@ -326,7 +578,7 @@ export default function Onboarding() {
               </div>
             )}
 
-            {currentStep === 3 && (
+            {currentStep === 4 && (
               <div>
                 <p className="text-center text-lg text-slate-600 mb-6">
                   Tap your preferred language or say it aloud

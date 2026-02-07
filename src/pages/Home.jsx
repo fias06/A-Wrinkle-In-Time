@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Users, Gamepad2, Heart, ArrowRight, Sparkles } from 'lucide-react';
 import { createPageUrl } from '@/utils';
-import { base44 } from '@/api/base44Client';
 import LargeButton from '@/components/ui/LargeButton';
 import AccessibleCard from '@/components/ui/AccessibleCard';
 
 export default function Home() {
+  const navigate = useNavigate();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [hasProfile, setHasProfile] = useState(false);
 
@@ -19,18 +19,15 @@ export default function Home() {
     // Check localStorage for profile
     const localProfile = localStorage.getItem('userProfile');
     if (localProfile) {
-      setHasProfile(true);
-      setIsAuthenticated(true);
-      return;
+      const profile = JSON.parse(localProfile);
+      if (profile.onboarding_complete) {
+        setHasProfile(true);
+        setIsAuthenticated(true);
+        return;
+      }
     }
-    
-    // Try backend auth
-    try {
-      const authenticated = await base44.auth.isAuthenticated();
-      setIsAuthenticated(authenticated);
-    } catch (e) {
-      setIsAuthenticated(false);
-    }
+    setIsAuthenticated(false);
+    setHasProfile(false);
   };
 
   const features = [
@@ -138,13 +135,13 @@ export default function Home() {
               <LargeButton 
                 variant="primary" 
                 icon={Users}
-                onClick={() => base44.auth.redirectToLogin(createPageUrl('Onboarding'))}
+                onClick={() => navigate(createPageUrl('Onboarding'))}
               >
                 Get Started Free
               </LargeButton>
               <LargeButton 
                 variant="outline"
-                onClick={() => base44.auth.redirectToLogin()}
+                onClick={() => navigate(createPageUrl('Onboarding'))}
               >
                 I Already Have an Account
               </LargeButton>
