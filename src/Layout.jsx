@@ -26,7 +26,90 @@ export default function Layout({ children, currentPageName }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const lastAnnouncedPage = useRef(null);
+  const spacebarSoundRef = useRef(null);
+  const isLoadingSound = useRef(false);
   const navigate = useNavigate();
+
+  // Pre-load spacebar sound effect from ElevenLabs
+  const loadSpacebarSound = useCallback(async () => {
+    if (spacebarSoundRef.current || isLoadingSound.current || !ELEVEN_LABS_API_KEY) return;
+    
+    isLoadingSound.current = true;
+    console.log('🔊 Loading spacebar sound effect...');
+    
+    try {
+      const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${ELEVEN_LABS_VOICE_ID}`, {
+        method: 'POST',
+        headers: {
+          'Accept': 'audio/mpeg',
+          'Content-Type': 'application/json',
+          'xi-api-key': ELEVEN_LABS_API_KEY
+        },
+        body: JSON.stringify({
+          text: 'Click!',
+          model_id: 'eleven_monolingual_v1',
+          voice_settings: {
+            stability: 0.8,
+            similarity_boost: 0.9
+          }
+        })
+      });
+
+      if (response.ok) {
+        const audioBlob = await response.blob();
+        const audioUrl = URL.createObjectURL(audioBlob);
+        spacebarSoundRef.current = audioUrl;
+        console.log('✅ Spacebar sound loaded!');
+      }
+    } catch (error) {
+      console.log('Could not load spacebar sound:', error);
+    }
+    isLoadingSound.current = false;
+  }, []);
+
+  // Play spacebar sound
+  const playSpacebarSound = useCallback(() => {
+    if (spacebarSoundRef.current) {
+      const audio = new Audio(spacebarSoundRef.current);
+      audio.volume = 0.5;
+      audio.play().catch(() => {});
+    } else {
+      // Fallback: use a simple beep with Web Audio API
+      try {
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const oscillator = audioContext.createOscillator();
+        const gainNode = audioContext.createGain();
+        
+        oscillator.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+        
+        oscillator.frequency.value = 800;
+        oscillator.type = 'sine';
+        gainNode.gain.value = 0.3;
+        
+        oscillator.start();
+        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
+        oscillator.stop(audioContext.currentTime + 0.1);
+      } catch (e) {
+        // Silent fallback
+      }
+    }
+  }, []);
+
+  // Global spacebar listener
+  useEffect(() => {
+    // Load sound on mount
+    loadSpacebarSound();
+
+    const handleKeyDown = (e) => {
+      if (e.code === 'Space' && e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
+        playSpacebarSound();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [loadSpacebarSound, playSpacebarSound]);
 
   // Fallback to browser speech synthesis
   const speakWithBrowserTTS = useCallback((text) => {
