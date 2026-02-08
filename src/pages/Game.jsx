@@ -22,20 +22,20 @@ const GENRE_PROMPTS = {
   electronic: 'electronic synth wave instrumental music',
 };
 
-// Fallback music tracks (royalty-free from Pixabay) in case ElevenLabs fails
+// Fallback music tracks - using reliable free music sources
 const FALLBACK_MUSIC = {
-  pop: 'https://cdn.pixabay.com/audio/2022/10/25/audio_946bc26c14.mp3',
-  rock: 'https://cdn.pixabay.com/audio/2022/03/10/audio_a47e2b1c5f.mp3',
-  jazz: 'https://cdn.pixabay.com/audio/2022/08/23/audio_d8c7ac7a2b.mp3',
-  classical: 'https://cdn.pixabay.com/audio/2022/02/15/audio_7921e7731b.mp3',
-  country: 'https://cdn.pixabay.com/audio/2022/08/02/audio_884fe92c21.mp3',
-  bollywood: 'https://cdn.pixabay.com/audio/2022/08/31/audio_419263cb5c.mp3',
-  lofi: 'https://cdn.pixabay.com/audio/2022/05/27/audio_1808fbf07a.mp3',
-  electronic: 'https://cdn.pixabay.com/audio/2022/04/27/audio_67bcb5ec15.mp3',
+  pop: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',
+  rock: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3',
+  jazz: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3',
+  classical: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3',
+  country: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-5.mp3',
+  bollywood: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-6.mp3',
+  lofi: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-7.mp3',
+  electronic: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3',
 };
 
 // Default fallback music
-const DEFAULT_MUSIC = 'https://cdn.pixabay.com/audio/2022/05/27/audio_1808fbf07a.mp3';
+const DEFAULT_MUSIC = 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3';
 
 // Game configurations
 const GAMES = {
@@ -79,6 +79,7 @@ export default function Game() {
   const [userGenre, setUserGenre] = useState('lofi');
   const audioRef = useRef(null);
   const iframeRef = useRef(null);
+  const [musicStarted, setMusicStarted] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const speakQueueRef = useRef([]);
 
@@ -288,112 +289,79 @@ export default function Game() {
     return FALLBACK_MUSIC[userGenre] || DEFAULT_MUSIC;
   };
 
-  // Initialize and manage background music
+  // Initialize background music
   useEffect(() => {
-    let isMounted = true;
-    let currentAudio = null;
+    const musicUrl = getFallbackMusicUrl();
+    console.log('🎵 Setting up music:', musicUrl);
+    
+    // Create audio element
+    const audio = new Audio(musicUrl);
+    audio.loop = true;
+    audio.volume = musicVolume;
+    audio.preload = 'auto';
+    
+    audioRef.current = audio;
 
-    const initMusic = async () => {
-      // Start with fallback music immediately
-      const fallbackUrl = getFallbackMusicUrl();
-      const audio = new Audio(fallbackUrl);
-      audio.loop = true;
-      audio.volume = musicVolume;
-      audio.preload = 'auto';
-      
-      if (!isMounted) return;
-      
-      audioRef.current = audio;
-      currentAudio = audio;
-
-      // Handle when audio can play
-      const handleCanPlay = () => {
-        if (musicEnabled && audioRef.current && isMounted) {
-          audioRef.current.play().catch((e) => {
-            console.log('Audio autoplay blocked:', e.message);
-          });
-        }
-      };
-
-      audio.addEventListener('canplaythrough', handleCanPlay);
-
-      // Try playing immediately
-      if (musicEnabled) {
-        audio.play().catch(() => {
-          console.log('Music will play after user interaction');
-        });
-      }
-
-      // Try to generate ElevenLabs music in background
-      try {
-        const elevenLabsUrl = await generateElevenLabsMusic(userGenre);
-        if (isMounted && elevenLabsUrl && elevenLabsUrl !== fallbackUrl) {
-          // Switch to ElevenLabs generated music
-          const wasPlaying = !audioRef.current?.paused;
-          const currentTime = audioRef.current?.currentTime || 0;
-          
-          audioRef.current.pause();
-          audioRef.current.src = elevenLabsUrl;
-          audioRef.current.load();
-          
-          if (wasPlaying && musicEnabled) {
-            audioRef.current.play().catch(() => {});
-          }
-          console.log('🎵 Switched to ElevenLabs generated music!');
-        }
-      } catch (e) {
-        console.log('Using fallback music');
-      }
+    audio.oncanplaythrough = () => console.log('🎵 Audio ready');
+    audio.onplay = () => {
+      console.log('🎵 Playing!');
+      setMusicStarted(true);
     };
-
-    initMusic();
-
-    // Add click handler to start music on first user interaction
-    const startMusicOnInteraction = () => {
-      if (musicEnabled && audioRef.current && audioRef.current.paused) {
-        audioRef.current.play().catch(() => {});
-      }
-      document.removeEventListener('click', startMusicOnInteraction);
-      document.removeEventListener('keydown', startMusicOnInteraction);
-    };
-    document.addEventListener('click', startMusicOnInteraction);
-    document.addEventListener('keydown', startMusicOnInteraction);
+    audio.onerror = (e) => console.log('🎵 Error:', e.type);
 
     return () => {
-      isMounted = false;
-      document.removeEventListener('click', startMusicOnInteraction);
-      document.removeEventListener('keydown', startMusicOnInteraction);
-      if (currentAudio) {
-        currentAudio.pause();
-        currentAudio.src = '';
-      }
+      audio.pause();
+      audio.src = '';
     };
   }, [userGenre]);
 
-  // Handle music toggle
+  // Control playback
   useEffect(() => {
-    if (audioRef.current) {
-      if (musicEnabled) {
-        audioRef.current.play().catch(() => {});
-      } else {
-        audioRef.current.pause();
-      }
+    if (!audioRef.current) return;
+    
+    if (musicEnabled && musicStarted) {
+      audioRef.current.play().catch(() => {});
+    } else if (!musicEnabled) {
+      audioRef.current.pause();
     }
-  }, [musicEnabled]);
+  }, [musicEnabled, musicStarted]);
 
-  // Handle volume changes
+  // Update volume
   useEffect(() => {
     if (audioRef.current) {
       audioRef.current.volume = musicVolume;
     }
   }, [musicVolume]);
 
+  // Play music on click
+  const playMusic = () => {
+    if (audioRef.current && !musicStarted) {
+      console.log('🎵 User clicked, trying to play...');
+      audioRef.current.play()
+        .then(() => {
+          console.log('🎵 Music started successfully!');
+          setMusicStarted(true);
+        })
+        .catch((e) => {
+          console.log('🎵 Play failed:', e.message);
+        });
+    }
+  };
+
+  // Toggle music on/off
   const toggleMusic = () => {
-    setMusicEnabled(!musicEnabled);
+    if (!musicStarted) {
+      playMusic();
+    } else {
+      setMusicEnabled(!musicEnabled);
+    }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 py-8 px-6">
+    <div 
+      className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 py-8 px-6"
+      onClick={playMusic}
+    >
       <div className="max-w-4xl mx-auto">
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
@@ -416,11 +384,13 @@ export default function Game() {
               <button
                 onClick={toggleMusic}
                 className={`p-3 rounded-xl transition-all ${
-                  musicEnabled 
+                  musicEnabled && musicStarted
                     ? 'bg-amber-500 text-white hover:bg-amber-600' 
+                    : musicEnabled && !musicStarted
+                    ? 'bg-amber-500/50 text-white hover:bg-amber-500 animate-pulse'
                     : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
                 }`}
-                aria-label={musicEnabled ? 'Mute music' : 'Play music'}
+                aria-label={musicStarted ? (musicEnabled ? 'Mute music' : 'Play music') : 'Click to start music'}
               >
                 {musicEnabled ? (
                   <Volume2 className="w-6 h-6" />
@@ -428,7 +398,7 @@ export default function Game() {
                   <VolumeX className="w-6 h-6" />
                 )}
               </button>
-              {musicEnabled && (
+              {musicEnabled && musicStarted && (
                 <input
                   type="range"
                   min="0"
@@ -443,7 +413,7 @@ export default function Game() {
             </div>
             {musicEnabled && (
               <span className="text-xs text-amber-400 capitalize">
-                🎵 {userGenre.replace('lofi', 'Lo-Fi')} music
+                {musicStarted ? `🎵 ${userGenre.replace('lofi', 'Lo-Fi')} music` : '🎵 Tap to play music'}
               </span>
             )}
           </div>

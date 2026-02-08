@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, ArrowRight, Check, User, Globe, Heart, Music, Camera, RefreshCw } from 'lucide-react';
@@ -9,6 +9,10 @@ import LargeButton from '@/components/ui/LargeButton';
 import InterestTag from '@/components/matching/InterestTag';
 import AccessibleCard from '@/components/ui/AccessibleCard';
 import { Input } from "@/components/ui/input";
+
+// ElevenLabs configuration
+const ELEVEN_LABS_API_KEY = import.meta.env.VITE_ELEVEN_LABS_API_KEY;
+const ELEVEN_LABS_VOICE_ID = '21m00Tcm4TlvDq8ikWAM'; // Rachel voice
 
 const INTERESTS = [
   'Gardening', 'Chess', 'History', 'Music', 'Cooking',
@@ -54,6 +58,8 @@ export default function Onboarding() {
     avatar_url: ''
   });
   const [isLoading, setIsLoading] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const hasAnnouncedStep = useRef({});
   
   // Camera state
   const videoRef = useRef(null);
@@ -63,6 +69,100 @@ export default function Onboarding() {
   const [cartoonAvatar, setCartoonAvatar] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const streamRef = useRef(null);
+
+  // Step descriptions for voice announcements
+  const STEP_ANNOUNCEMENTS = {
+    0: "Welcome! Let's create your profile. First, take a photo for your avatar. Say 'take photo' or click the camera button.",
+    1: "Great! Now, what should we call you? Type your name or say it out loud.",
+    2: "Choose your interests. Tap the ones you enjoy, or say them out loud. Select at least 3.",
+    3: "What kind of music do you like? Pick your favorite genre.",
+    4: "Almost done! What language do you speak? Tap to select."
+  };
+
+  // Browser TTS fallback
+  const speakWithBrowserTTS = useCallback((text) => {
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.rate = 0.9;
+      utterance.pitch = 1;
+      utterance.volume = 1;
+      window.speechSynthesis.speak(utterance);
+    }
+  }, []);
+
+  // ElevenLabs text-to-speech function with fallback
+  const speakWithElevenLabs = useCallback(async (text) => {
+    if (!text) return;
+    
+    console.log('🔊 Onboarding speaking:', text);
+
+    if (!ELEVEN_LABS_API_KEY) {
+      speakWithBrowserTTS(text);
+      return;
+    }
+
+    if (isSpeaking) return;
+
+    setIsSpeaking(true);
+    try {
+      const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${ELEVEN_LABS_VOICE_ID}`, {
+        method: 'POST',
+        headers: {
+          'Accept': 'audio/mpeg',
+          'Content-Type': 'application/json',
+          'xi-api-key': ELEVEN_LABS_API_KEY
+        },
+        body: JSON.stringify({
+          text: text,
+          model_id: 'eleven_monolingual_v1',
+          voice_settings: {
+            stability: 0.5,
+            similarity_boost: 0.75
+          }
+        })
+      });
+
+      if (!response.ok) {
+        setIsSpeaking(false);
+        speakWithBrowserTTS(text);
+        return;
+      }
+
+      const audioBlob = await response.blob();
+      const audioUrl = URL.createObjectURL(audioBlob);
+      const audio = new Audio(audioUrl);
+
+      audio.onended = () => {
+        setIsSpeaking(false);
+        URL.revokeObjectURL(audioUrl);
+      };
+
+      audio.onerror = () => {
+        setIsSpeaking(false);
+        URL.revokeObjectURL(audioUrl);
+        speakWithBrowserTTS(text);
+      };
+
+      await audio.play();
+    } catch (error) {
+      console.log('ElevenLabs error:', error);
+      setIsSpeaking(false);
+      speakWithBrowserTTS(text);
+    }
+  }, [isSpeaking, speakWithBrowserTTS]);
+
+  // Announce current step when it changes
+  useEffect(() => {
+    // Small delay to let the page render first
+    const timer = setTimeout(() => {
+      if (!hasAnnouncedStep.current[currentStep]) {
+        hasAnnouncedStep.current[currentStep] = true;
+        speakWithElevenLabs(STEP_ANNOUNCEMENTS[currentStep]);
+      }
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [currentStep, speakWithElevenLabs]);
 
   // Start camera
   const startCamera = async () => {
