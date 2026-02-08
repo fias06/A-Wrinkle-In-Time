@@ -65,35 +65,84 @@ export class Bridge extends Phaser.Scene {
     connectSocket() {
         if (typeof io === 'undefined') {
             console.warn('socket.io client not found');
+            this.roomText.setText('Mode: Local Solo');
+            this.playersText.setText('Play offline!');
             return;
         }
-        this.socket = io();
+        
+        // Try to connect but handle failure gracefully
+        try {
+            this.socket = io({ 
+                timeout: 3000,
+                reconnectionAttempts: 1
+            });
 
-        this.socket.on('connect', () => {
-            this.roomText.setText('Room: connecting...');
-        });
+            this.socket.on('connect', () => {
+                this.roomText.setText('Room: connecting...');
+            });
 
-        this.socket.on('joined', (info) => {
-            this.roomText.setText('Room: ' + info.room);
-            this.playersText.setText('Players: ' + info.count + '/2');
-            if (info.state) {
-                this.grid = info.state.grid;
+            this.socket.on('connect_error', () => {
+                console.log('Server not available, running in local mode');
+                this.roomText.setText('Mode: Local Solo');
+                this.playersText.setText('Play offline!');
+                this.socket = null;
+            });
+
+            this.socket.on('joined', (info) => {
+                this.roomText.setText('Room: ' + info.room);
+                this.playersText.setText('Players: ' + info.count + '/2');
+                if (info.state) {
+                    this.grid = info.state.grid;
+                }
+            });
+
+            this.socket.on('players', (count) => {
+                this.playersText.setText('Players: ' + count + '/2');
+            });
+
+            this.socket.on('state', (state) => {
+                if (state && state.grid) {
+                    this.grid = state.grid;
+                    this.checkWin();
+                }
+            });
+
+            this.socket.on('start', () => {
+                // optionally used
+            });
+        } catch (e) {
+            console.log('Socket connection failed, running in local mode');
+            this.roomText.setText('Mode: Local Solo');
+            this.playersText.setText('Play offline!');
+            this.socket = null;
+        }
+
+        // Voice command listener for accessibility
+        window.addEventListener('message', (event) => {
+            if (event.data && event.data.type === 'voice-command') {
+                const action = event.data.action;
+                
+                if (!this.piece) return;
+                
+                if (action === 'left') {
+                    if (this.canPlace(this.px - 1, this.py, this.piece)) this.px--;
+                } else if (action === 'right') {
+                    if (this.canPlace(this.px + 1, this.py, this.piece)) this.px++;
+                } else if (action === 'down') {
+                    if (this.canPlace(this.px, this.py + 1, this.piece)) this.py++;
+                    else this.lockPiece();
+                } else if (action === 'rotate') {
+                    this.rotatePiece();
+                    if (!this.canPlace(this.px, this.py, this.piece)) {
+                        // revert rotate
+                        this.rotatePiece(); this.rotatePiece(); this.rotatePiece();
+                    }
+                } else if (action === 'drop') {
+                    // hard drop
+                    while (this.canPlace(this.px, this.py + 1, this.piece)) this.py++;
+                    this.lockPiece();
+                }
             }
-        });
-
-        this.socket.on('players', (count) => {
-            this.playersText.setText('Players: ' + count + '/2');
-        });
-
-        this.socket.on('state', (state) => {
-            if (state && state.grid) {
-                this.grid = state.grid;
-                this.checkWin();
-            }
-        });
-
-        this.socket.on('start', () => {
-            // optionally used
         });
     }
 

@@ -1,14 +1,13 @@
-// @ts-nocheck
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { 
   User, Camera, LogOut, Edit2, Check, 
-  Globe, Heart, Clock, RefreshCw, X 
+  Globe, Heart, Clock, RefreshCw
 } from 'lucide-react';
+import { createPageUrl } from '@/utils';
+import { appClient } from '@/api/appClient';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/lib/supabaseClient';
-import { useAuth } from '@/lib/authContext';
 import LargeButton from '@/components/ui/LargeButton';
 import InterestTag from '@/components/matching/InterestTag';
 import { Input } from "@/components/ui/input";
@@ -30,12 +29,10 @@ const LANGUAGES = [
 export default function Profile() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { user, signOut } = useAuth(); // NEW: Use real Auth context
-  
   const [isEditing, setIsEditing] = useState(false);
   const [editedProfile, setEditedProfile] = useState(null);
   
-  // Camera state
+  // Avatar camera state
   const [showAvatarCamera, setShowAvatarCamera] = useState(false);
   const [cameraActive, setCameraActive] = useState(false);
   const [isProcessingAvatar, setIsProcessingAvatar] = useState(false);
@@ -43,74 +40,99 @@ export default function Profile() {
   const canvasRef = useRef(null);
   const streamRef = useRef(null);
 
-  // --- 1. FETCH PROFILE FROM SUPABASE ---
-  const { data: profile, isLoading } = useQuery({
-    queryKey: ['myProfile', user?.id],
+  const { data: user } = useQuery({
+    queryKey: ['currentUser'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', user.id)
-        .single();
-      
-      if (error) throw error;
-      return data;
-    },
-    enabled: !!user?.id
+      try {
+        return await appClient.auth.me();
+      } catch (e) {
+        // Return null if auth fails
+        return null;
+      }
+    }
   });
 
-  // --- 2. UPDATE PROFILE IN SUPABASE ---
-  const updateMutation = useMutation({
-    mutationFn: async (updatedData) => {
-      const { error } = await supabase
-        .from('profiles')
-        .update({
-          display_name: updatedData.display_name,
-          bio: updatedData.bio,
-          interests: updatedData.interests,
-          language: updatedData.language,
-          avatar_url: updatedData.avatar_url,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', user.id);
+  const { data: profile, isLoading } = useQuery({
+    queryKey: ['myProfile'],
+    queryFn: async () => {
+      // Try localStorage first
+      const localProfile = localStorage.getItem('userProfile');
+      if (localProfile) {
+        return JSON.parse(localProfile);
+      }
+      
+      // Try backend
+      try {
+        const profiles = await appClient.entities.UserProfile.list();
+        return profiles[0] || null;
+      } catch (e) {
+        return null;
+      }
+    }
+  });
 
-      if (error) throw error;
-      return updatedData;
+  const updateMutation = useMutation({
+    mutationFn: async (data) => {
+      // Save to localStorage
+      localStorage.setItem('userProfile', JSON.stringify(data));
+      
+      // Try to save to backend
+      try {
+        if (profile?.id && !profile.id.startsWith('mock')) {
+          await appClient.entities.UserProfile.update(profile.id, data);
+        }
+      } catch (e) {
+        console.log('Backend not available, saved to localStorage');
+      }
+      return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries(['myProfile']);
+      setIsEditing(false);
+    },
+    onError: () => {
       setIsEditing(false);
     }
   });
 
   useEffect(() => {
-    if (profile) setEditedProfile(profile);
+    if (profile) {
+      setEditedProfile(profile);
+    }
   }, [profile]);
 
-  // --- LOGOUT HANDLER ---
-  const handleLogout = async () => {
-    await signOut();
-    navigate('/login');
+  const toggleInterest = (interest) => {
+    if (!editedProfile) return;
+    const currentInterests = editedProfile.interests || [];
+    const newInterests = currentInterests.includes(interest)
+      ? currentInterests.filter(i => i !== interest)
+      : [...currentInterests, interest];
+    
+    setEditedProfile({ ...editedProfile, interests: newInterests });
   };
 
   const handleSave = () => {
-    if (editedProfile) updateMutation.mutate(editedProfile);
+    if (editedProfile) {
+      updateMutation.mutate(editedProfile);
+    }
   };
 
-  const toggleInterest = (interest) => {
-    const current = editedProfile?.interests || [];
-    const updated = current.includes(interest)
-      ? current.filter(i => i !== interest)
-      : [...current, interest];
-    setEditedProfile({ ...editedProfile, interests: updated });
+  const handleLogout = () => {
+    // Clear localStorage
+    localStorage.removeItem('userProfile');
+    localStorage.removeItem('myFriends');
+    // Clear query cache
+    queryClient.clear();
+    // Navigate to home
+    navigate(createPageUrl('Home'));
   };
 
-  // --- CARTOON CAMERA LOGIC (KEPT FROM ORIGINAL) ---
+  // Avatar camera functions
   const startAvatarCamera = async () => {
     setShowAvatarCamera(true);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: { facingMode: 'user', width: 400, height: 400 } 
+        video: { facingMode: 'user', width: 640, height: 480 } 
       });
       streamRef.current = stream;
       if (videoRef.current) {
@@ -119,161 +141,396 @@ export default function Profile() {
       }
       setCameraActive(true);
     } catch (err) {
-      alert('Camera access denied');
+      console.error('Camera error:', err);
+      alert('Could not access camera. Please allow camera permissions.');
       setShowAvatarCamera(false);
     }
   };
 
   const stopAvatarCamera = () => {
-    if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop());
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
     setCameraActive(false);
     setShowAvatarCamera(false);
   };
 
+  const applyCartoonEffect = (imageData) => {
+    const data = imageData.data;
+    const width = imageData.width;
+    const height = imageData.height;
+    
+    const levels = 6;
+    for (let i = 0; i < data.length; i += 4) {
+      data[i] = Math.round(data[i] / (256 / levels)) * (256 / levels);
+      data[i + 1] = Math.round(data[i + 1] / (256 / levels)) * (256 / levels);
+      data[i + 2] = Math.round(data[i + 2] / (256 / levels)) * (256 / levels);
+    }
+    
+    for (let i = 0; i < data.length; i += 4) {
+      const r = data[i];
+      const g = data[i + 1];
+      const b = data[i + 2];
+      const avg = (r + g + b) / 3;
+      const boost = 1.4;
+      data[i] = Math.min(255, avg + (r - avg) * boost + 15);
+      data[i + 1] = Math.min(255, avg + (g - avg) * boost + 5);
+      data[i + 2] = Math.min(255, avg + (b - avg) * boost - 10);
+    }
+    
+    const tempData = new Uint8ClampedArray(data);
+    for (let y = 1; y < height - 1; y++) {
+      for (let x = 1; x < width - 1; x++) {
+        const idx = (y * width + x) * 4;
+        const leftIdx = (y * width + (x - 1)) * 4;
+        const rightIdx = (y * width + (x + 1)) * 4;
+        const topIdx = ((y - 1) * width + x) * 4;
+        const bottomIdx = ((y + 1) * width + x) * 4;
+        const gx = Math.abs(tempData[rightIdx] - tempData[leftIdx]);
+        const gy = Math.abs(tempData[bottomIdx] - tempData[topIdx]);
+        const edge = gx + gy;
+        if (edge > 30) {
+          const darkFactor = Math.min(1, edge / 100);
+          data[idx] = Math.max(0, data[idx] - 50 * darkFactor);
+          data[idx + 1] = Math.max(0, data[idx + 1] - 50 * darkFactor);
+          data[idx + 2] = Math.max(0, data[idx + 2] - 50 * darkFactor);
+        }
+      }
+    }
+    return imageData;
+  };
+
   const captureNewAvatar = () => {
     if (!videoRef.current || !canvasRef.current) return;
-    setIsProcessingAvatar(true);
     
+    setIsProcessingAvatar(true);
+    const video = videoRef.current;
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
+    
     canvas.width = 300;
     canvas.height = 300;
-    ctx.drawImage(videoRef.current, 0, 0, 300, 300);
-
-    // Apply your specific cartoon effect logic here...
-    // (Shortened for brevity, but keep your existing pixel manipulation)
+    
+    const size = Math.min(video.videoWidth, video.videoHeight);
+    const startX = (video.videoWidth - size) / 2;
+    const startY = (video.videoHeight - size) / 2;
+    
+    ctx.drawImage(video, startX, startY, size, size, 0, 0, 300, 300);
+    
+    const imageData = ctx.getImageData(0, 0, 300, 300);
+    const cartoonImageData = applyCartoonEffect(imageData);
+    ctx.putImageData(cartoonImageData, 0, 0);
+    
+    ctx.globalCompositeOperation = 'destination-in';
+    ctx.beginPath();
+    ctx.arc(150, 150, 145, 0, Math.PI * 2);
+    ctx.fill();
+    
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.strokeStyle = '#f59e0b';
+    ctx.lineWidth = 8;
+    ctx.beginPath();
+    ctx.arc(150, 150, 145, 0, Math.PI * 2);
+    ctx.stroke();
+    
     const cartoonDataUrl = canvas.toDataURL('image/png');
     setEditedProfile(prev => ({ ...prev, avatar_url: cartoonDataUrl }));
     
+    // Also update localStorage immediately
+    const currentProfile = JSON.parse(localStorage.getItem('userProfile') || '{}');
+    currentProfile.avatar_url = cartoonDataUrl;
+    localStorage.setItem('userProfile', JSON.stringify(currentProfile));
+    
     setIsProcessingAvatar(false);
     stopAvatarCamera();
+    queryClient.invalidateQueries(['myProfile']);
   };
 
-  if (isLoading) return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
+  const handleImageUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      // Try to upload to backend
+      const { file_url } = await appClient.integrations.Core.UploadFile({ file });
+      setEditedProfile({ ...editedProfile, avatar_url: file_url });
+    } catch (error) {
+      // If backend fails, create a local URL
+      const localUrl = URL.createObjectURL(file);
+      setEditedProfile({ ...editedProfile, avatar_url: localUrl });
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-amber-50 via-white to-amber-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-amber-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-2xl text-slate-600">Loading your profile...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!profile) {
+    navigate(createPageUrl('Onboarding'));
+    return null;
+  }
+
+  const displayProfile = isEditing ? editedProfile : profile;
 
   return (
-    <div className="min-h-screen bg-amber-50/50 py-10 px-6">
+    <div className="min-h-screen bg-gradient-to-b from-amber-50 via-white to-amber-50 py-8 px-6">
       <div className="max-w-2xl mx-auto">
-        
-        {/* PROFILE HEADER */}
-        <div className="flex items-center justify-between mb-8">
-          <h1 className="text-4xl font-black text-slate-800 tracking-tight">Profile</h1>
-          <button 
-            onClick={() => setIsEditing(!isEditing)}
-            className="p-3 rounded-full bg-white shadow-sm border border-slate-200 text-slate-600 hover:text-amber-600 transition-colors"
-          >
-            {isEditing ? <X size={24} /> : <Edit2 size={24} />}
-          </button>
+        {/* Header */}
+        <div className="text-center mb-8">
+          <h1 className="text-4xl md:text-5xl font-bold text-slate-800 mb-4">
+            My Profile
+          </h1>
         </div>
 
-        {/* MAIN CARD */}
-        <div className="bg-white rounded-[2.5rem] p-10 shadow-xl shadow-amber-900/5 border border-slate-100 relative overflow-hidden">
-          <div className="absolute top-0 left-0 w-full h-2 bg-amber-500" />
-          
-          <div className="flex flex-col items-center">
-            {/* AVATAR */}
-            <div className="relative group mb-6">
-              <img
-                src={editedProfile?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.email}`}
-                alt="Profile"
-                className="w-40 h-40 rounded-full border-8 border-amber-100 object-cover shadow-inner"
-              />
+        {/* Profile Card */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-white rounded-3xl p-8 border-4 border-slate-200 shadow-xl mb-8"
+        >
+          {/* Avatar Section */}
+          <div className="flex flex-col items-center mb-8">
+            <div className="relative mb-4">
+              {displayProfile?.avatar_url ? (
+                <img
+                  src={displayProfile.avatar_url}
+                  alt="Profile"
+                  className="w-32 h-32 rounded-full object-cover border-4 border-amber-300"
+                />
+              ) : (
+                <div className="w-32 h-32 rounded-full bg-gradient-to-br from-amber-400 to-amber-500 flex items-center justify-center border-4 border-amber-300">
+                  <span className="text-5xl font-bold text-white">
+                    {displayProfile?.display_name?.[0]?.toUpperCase() || '?'}
+                  </span>
+                </div>
+              )}
+              
               {isEditing && (
-                <button 
-                  onClick={startAvatarCamera}
-                  className="absolute bottom-0 right-0 p-3 bg-amber-500 text-white rounded-full shadow-lg hover:scale-110 transition-transform"
-                >
-                  <Camera size={20} />
-                </button>
+                <div className="absolute -bottom-2 -right-2 flex gap-1">
+                  <button 
+                    onClick={startAvatarCamera}
+                    className="w-10 h-10 bg-amber-500 rounded-full flex items-center justify-center cursor-pointer hover:bg-amber-600 transition-all shadow-lg"
+                    title="Take new photo"
+                  >
+                    <Camera className="w-5 h-5 text-white" />
+                  </button>
+                  <label className="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center cursor-pointer hover:bg-blue-600 transition-all shadow-lg" title="Upload photo">
+                    <RefreshCw className="w-5 h-5 text-white" />
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleImageUpload}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
               )}
             </div>
 
-            {/* NAME & EMAIL */}
+            {/* Avatar Camera Modal */}
+            {showAvatarCamera && (
+              <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+                <motion.div 
+                  initial={{ scale: 0.9, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  className="bg-white rounded-3xl p-6 max-w-md w-full"
+                >
+                  <h3 className="text-2xl font-bold text-center mb-4">Take a New Photo</h3>
+                  
+                  <div className="relative mb-4">
+                    <video 
+                      ref={videoRef} 
+                      autoPlay 
+                      playsInline 
+                      muted 
+                      className="w-full aspect-square object-cover rounded-full border-4 border-amber-300"
+                    />
+                    <canvas ref={canvasRef} className="hidden" />
+                    
+                    {/* Circular overlay */}
+                    <div className="absolute inset-0 pointer-events-none">
+                      <svg className="w-full h-full">
+                        <defs>
+                          <mask id="circleMask">
+                            <rect width="100%" height="100%" fill="white"/>
+                            <circle cx="50%" cy="50%" r="48%" fill="black"/>
+                          </mask>
+                        </defs>
+                        <rect width="100%" height="100%" fill="rgba(0,0,0,0.5)" mask="url(#circleMask)"/>
+                      </svg>
+                    </div>
+                  </div>
+                  
+                  <div className="flex gap-3">
+                    <Button
+                      onClick={stopAvatarCamera}
+                      variant="outline"
+                      className="flex-1 py-4 text-lg rounded-xl"
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      onClick={captureNewAvatar}
+                      disabled={!cameraActive || isProcessingAvatar}
+                      className="flex-1 py-4 text-lg bg-amber-500 hover:bg-amber-600 rounded-xl"
+                    >
+                      {isProcessingAvatar ? 'Processing...' : 'Capture'}
+                    </Button>
+                  </div>
+                </motion.div>
+              </div>
+            )}
+
             {isEditing ? (
               <Input
                 value={editedProfile?.display_name || ''}
                 onChange={(e) => setEditedProfile({ ...editedProfile, display_name: e.target.value })}
-                className="text-2xl font-bold text-center border-none focus-visible:ring-amber-500 bg-slate-50 rounded-xl py-6"
-                placeholder="What's your name?"
+                className="text-2xl font-bold text-center max-w-xs border-2 h-auto py-2"
+                placeholder="Your name"
               />
             ) : (
-              <h2 className="text-3xl font-black text-slate-800">{profile?.display_name || 'New User'}</h2>
+              <h2 className="text-3xl font-bold text-slate-800">
+                {displayProfile?.display_name}
+              </h2>
             )}
-            <p className="text-slate-400 font-medium mt-1 mb-8">{user?.email}</p>
+
+            <p className="text-lg text-slate-500 mt-2">{user?.email}</p>
           </div>
 
-          <hr className="border-slate-100 mb-8" />
+          {/* Language */}
+          <div className="mb-8">
+            <div className="flex items-center gap-2 text-xl font-semibold text-slate-700 mb-4">
+              <Globe className="w-6 h-6 text-amber-500" />
+              Language
+            </div>
+            {isEditing ? (
+              <div className="flex flex-wrap gap-3">
+                {LANGUAGES.map((lang) => (
+                  <motion.button
+                    key={lang}
+                    onClick={() => setEditedProfile({ ...editedProfile, language: lang })}
+                    className={`px-5 py-3 rounded-xl text-lg font-medium transition-all ${
+                      editedProfile?.language === lang
+                        ? 'bg-amber-500 text-white'
+                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                    }`}
+                    whileTap={{ scale: 0.95 }}
+                  >
+                    {lang}
+                  </motion.button>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xl text-slate-600">
+                {displayProfile?.language || 'Not set'}
+              </p>
+            )}
+          </div>
 
-          {/* FIELDS */}
-          <div className="space-y-8">
-            {/* BIO */}
-            <section>
-              <label className="text-xs font-black uppercase tracking-widest text-slate-400 mb-3 block">About Me</label>
-              {isEditing ? (
-                <Textarea
-                  value={editedProfile?.bio || ''}
-                  onChange={(e) => setEditedProfile({ ...editedProfile, bio: e.target.value })}
-                  className="bg-slate-50 border-none rounded-2xl p-4 text-lg min-h-[100px]"
-                />
-              ) : (
-                <p className="text-xl text-slate-700 leading-relaxed">{profile?.bio || "No bio added yet. Tell us about yourself!"}</p>
-              )}
-            </section>
+          {/* Bio */}
+          <div className="mb-8">
+            <div className="flex items-center gap-2 text-xl font-semibold text-slate-700 mb-4">
+              <User className="w-6 h-6 text-amber-500" />
+              About Me
+            </div>
+            {isEditing ? (
+              <Textarea
+                value={editedProfile?.bio || ''}
+                onChange={(e) => setEditedProfile({ ...editedProfile, bio: e.target.value })}
+                placeholder="Tell others a little about yourself..."
+                className="text-lg border-2 min-h-[120px]"
+              />
+            ) : (
+              <p className="text-xl text-slate-600">
+                {displayProfile?.bio || 'No bio yet'}
+              </p>
+            )}
+          </div>
 
-            {/* INTERESTS */}
-            <section>
-              <label className="text-xs font-black uppercase tracking-widest text-slate-400 mb-3 block">My Interests</label>
-              <div className="flex flex-wrap gap-2">
-                {(isEditing ? INTERESTS : (profile?.interests || [])).map(item => (
+          {/* Interests */}
+          <div className="mb-8">
+            <div className="flex items-center gap-2 text-xl font-semibold text-slate-700 mb-4">
+              <Heart className="w-6 h-6 text-amber-500" />
+              My Interests
+            </div>
+            {isEditing ? (
+              <div className="flex flex-wrap gap-3">
+                {INTERESTS.map((interest) => (
                   <InterestTag
-                    key={item}
-                    interest={item}
-                    selected={editedProfile?.interests?.includes(item)}
-                    onClick={() => isEditing && toggleInterest(item)}
-                    size={isEditing ? "small" : "medium"}
+                    key={interest}
+                    interest={interest}
+                    selected={(editedProfile?.interests || []).includes(interest)}
+                    onClick={() => toggleInterest(interest)}
+                    size="small"
                   />
                 ))}
               </div>
-            </section>
-
-            {/* LANGUAGE */}
-            <section>
-              <label className="text-xs font-black uppercase tracking-widest text-slate-400 mb-3 block">Preferred Language</label>
-              <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
-                {(isEditing ? LANGUAGES : [profile?.language || 'English']).map(lang => (
-                  <button
-                    key={lang}
-                    onClick={() => isEditing && setEditedProfile({...editedProfile, language: lang})}
-                    className={`px-6 py-2 rounded-full font-bold whitespace-nowrap transition-all ${
-                      editedProfile?.language === lang 
-                      ? 'bg-amber-500 text-white' 
-                      : 'bg-slate-100 text-slate-500'
-                    }`}
+            ) : (
+              <div className="flex flex-wrap gap-3">
+                {(displayProfile?.interests || []).map((interest) => (
+                  <span
+                    key={interest}
+                    className="bg-amber-100 text-amber-800 px-4 py-2 rounded-xl text-lg font-medium"
                   >
-                    {lang}
-                  </button>
+                    {interest}
+                  </span>
                 ))}
+                {(!displayProfile?.interests || displayProfile.interests.length === 0) && (
+                  <p className="text-xl text-slate-500">No interests added yet</p>
+                )}
               </div>
-            </section>
+            )}
           </div>
 
-          {/* METADATA */}
-          <div className="mt-12 flex items-center justify-center gap-2 text-slate-300 font-bold text-sm">
-            <Clock size={16} />
-            <span>Member since {new Date(profile?.created_at).toLocaleDateString()}</span>
+          {/* Member since */}
+          <div className="flex items-center gap-2 text-lg text-slate-500">
+            <Clock className="w-5 h-5" />
+            Member since {new Date(profile.created_date).toLocaleDateString('en-US', {
+              year: 'numeric',
+              month: 'long'
+            })}
           </div>
-        </div>
+        </motion.div>
 
-        {/* FOOTER ACTIONS */}
-        <div className="mt-8 space-y-4">
-          {isEditing && (
+        {/* Action Buttons */}
+        <div className="flex flex-col gap-4">
+          {isEditing ? (
+            <div className="flex gap-4">
+              <LargeButton
+                onClick={handleSave}
+                variant="success"
+                icon={Check}
+                className="flex-1"
+                disabled={updateMutation.isPending}
+              >
+                {updateMutation.isPending ? 'Saving...' : 'Save Changes'}
+              </LargeButton>
+              <LargeButton
+                onClick={() => {
+                  setIsEditing(false);
+                  setEditedProfile(profile);
+                }}
+                variant="outline"
+                className="flex-1"
+              >
+                Cancel
+              </LargeButton>
+            </div>
+          ) : (
             <LargeButton
-              onClick={handleSave}
-              variant="success"
-              icon={Check}
-              disabled={updateMutation.isPending}
+              onClick={() => setIsEditing(true)}
+              variant="primary"
+              icon={Edit2}
             >
-              {updateMutation.isPending ? 'Saving...' : 'Confirm Changes'}
+              Edit Profile
             </LargeButton>
           )}
 
@@ -286,24 +543,6 @@ export default function Profile() {
           </LargeButton>
         </div>
       </div>
-
-      {/* CAMERA MODAL */}
-      <AnimatePresence>
-        {showAvatarCamera && (
-          <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-sm z-50 flex items-center justify-center p-6">
-            <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} className="bg-white rounded-[3rem] p-8 max-w-sm w-full text-center">
-              <div className="relative w-64 h-64 mx-auto mb-8 rounded-full overflow-hidden border-8 border-amber-400">
-                <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
-                <canvas ref={canvasRef} className="hidden" />
-              </div>
-              <div className="flex gap-4">
-                <Button onClick={stopAvatarCamera} variant="outline" className="flex-1 rounded-2xl py-6">Cancel</Button>
-                <Button onClick={captureNewAvatar} className="flex-1 bg-amber-500 rounded-2xl py-6 font-bold">Capture</Button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
     </div>
   );
 }
