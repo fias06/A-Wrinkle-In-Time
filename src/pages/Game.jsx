@@ -6,40 +6,31 @@ import { createPageUrl } from '@/utils';
 import LargeButton from '@/components/ui/LargeButton';
 import VoiceButton from '@/components/voice/VoiceButton';
 
-// Genre-specific music tracks (royalty-free from Pixabay)
-const GENRE_MUSIC = {
-  pop: [
-    'https://cdn.pixabay.com/audio/2022/10/25/audio_946bc26c14.mp3', // Upbeat pop
-    'https://cdn.pixabay.com/audio/2023/07/03/audio_54076c53b9.mp3', // Happy pop
-  ],
-  rock: [
-    'https://cdn.pixabay.com/audio/2022/03/10/audio_a47e2b1c5f.mp3', // Rock energy
-    'https://cdn.pixabay.com/audio/2022/11/22/audio_c9944a1e78.mp3', // Guitar rock
-  ],
-  jazz: [
-    'https://cdn.pixabay.com/audio/2022/08/23/audio_d8c7ac7a2b.mp3', // Smooth jazz
-    'https://cdn.pixabay.com/audio/2024/11/06/audio_8b43c85f95.mp3', // Jazz cafe
-  ],
-  classical: [
-    'https://cdn.pixabay.com/audio/2022/02/15/audio_7921e7731b.mp3', // Classical piano
-    'https://cdn.pixabay.com/audio/2023/09/25/audio_3dfbb38c9d.mp3', // Orchestra
-  ],
-  country: [
-    'https://cdn.pixabay.com/audio/2022/08/02/audio_884fe92c21.mp3', // Country acoustic
-    'https://cdn.pixabay.com/audio/2024/02/14/audio_a1c01a3520.mp3', // Country guitar
-  ],
-  bollywood: [
-    'https://cdn.pixabay.com/audio/2022/08/31/audio_419263cb5c.mp3', // Indian fusion
-    'https://cdn.pixabay.com/audio/2023/05/16/audio_5c5f191106.mp3', // Bollywood beat
-  ],
-  lofi: [
-    'https://cdn.pixabay.com/audio/2022/05/27/audio_1808fbf07a.mp3', // Lofi chill
-    'https://cdn.pixabay.com/audio/2022/03/15/audio_942759bd4f.mp3', // Chill beats
-  ],
-  electronic: [
-    'https://cdn.pixabay.com/audio/2022/04/27/audio_67bcb5ec15.mp3', // Electronic
-    'https://cdn.pixabay.com/audio/2022/10/30/audio_a583ca4fc2.mp3', // Synth wave
-  ],
+// ElevenLabs API key from environment
+const ELEVEN_LABS_API_KEY = import.meta.env.VITE_ELEVEN_LABS_API_KEY || 'sk_b2f7e426e2eef8b2f5f0b02d239a744c04068c80bc3c00a0';
+
+// Genre prompts for ElevenLabs sound generation
+const GENRE_PROMPTS = {
+  pop: 'upbeat happy pop instrumental music, cheerful and energetic',
+  rock: 'energetic rock instrumental music with electric guitar',
+  jazz: 'smooth relaxing jazz instrumental music, saxophone and piano',
+  classical: 'beautiful classical piano music, peaceful and elegant',
+  country: 'acoustic country instrumental music with guitar',
+  bollywood: 'upbeat bollywood fusion instrumental music',
+  lofi: 'chill lofi hip hop beats, relaxing study music',
+  electronic: 'electronic synth wave instrumental music',
+};
+
+// Fallback music tracks (royalty-free from Pixabay) in case ElevenLabs fails
+const FALLBACK_MUSIC = {
+  pop: 'https://cdn.pixabay.com/audio/2022/10/25/audio_946bc26c14.mp3',
+  rock: 'https://cdn.pixabay.com/audio/2022/03/10/audio_a47e2b1c5f.mp3',
+  jazz: 'https://cdn.pixabay.com/audio/2022/08/23/audio_d8c7ac7a2b.mp3',
+  classical: 'https://cdn.pixabay.com/audio/2022/02/15/audio_7921e7731b.mp3',
+  country: 'https://cdn.pixabay.com/audio/2022/08/02/audio_884fe92c21.mp3',
+  bollywood: 'https://cdn.pixabay.com/audio/2022/08/31/audio_419263cb5c.mp3',
+  lofi: 'https://cdn.pixabay.com/audio/2022/05/27/audio_1808fbf07a.mp3',
+  electronic: 'https://cdn.pixabay.com/audio/2022/04/27/audio_67bcb5ec15.mp3',
 };
 
 // Default fallback music
@@ -140,41 +131,105 @@ export default function Game() {
     }
   }, []);
 
-  // Get music URL based on user's genre preference
-  const getMusicUrl = () => {
-    const tracks = GENRE_MUSIC[userGenre];
-    if (tracks && tracks.length > 0) {
-      return tracks[Math.floor(Math.random() * tracks.length)];
+  // Generate music using ElevenLabs or use fallback
+  const generateElevenLabsMusic = async (genre) => {
+    try {
+      console.log('🎵 Generating music with ElevenLabs for genre:', genre);
+      
+      // ElevenLabs Sound Effects API
+      const response = await fetch('https://api.elevenlabs.io/v1/sound-generation', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'xi-api-key': ELEVEN_LABS_API_KEY,
+        },
+        body: JSON.stringify({
+          text: GENRE_PROMPTS[genre] || GENRE_PROMPTS.lofi,
+          duration_seconds: 30,
+          prompt_influence: 0.5,
+        }),
+      });
+
+      if (!response.ok) {
+        console.log('ElevenLabs API error, using fallback music');
+        return FALLBACK_MUSIC[genre] || DEFAULT_MUSIC;
+      }
+
+      // Get audio blob and create URL
+      const audioBlob = await response.blob();
+      const audioUrl = URL.createObjectURL(audioBlob);
+      console.log('🎵 ElevenLabs music generated successfully!');
+      return audioUrl;
+    } catch (error) {
+      console.log('ElevenLabs error, using fallback:', error.message);
+      return FALLBACK_MUSIC[genre] || DEFAULT_MUSIC;
     }
-    return DEFAULT_MUSIC;
+  };
+
+  // Get music URL (fallback for immediate use)
+  const getFallbackMusicUrl = () => {
+    return FALLBACK_MUSIC[userGenre] || DEFAULT_MUSIC;
   };
 
   // Initialize and manage background music
   useEffect(() => {
-    // Create audio element with user's preferred genre
-    const audio = new Audio(getMusicUrl());
-    audio.loop = true;
-    audio.volume = musicVolume;
-    audio.preload = 'auto';
-    audioRef.current = audio;
+    let isMounted = true;
+    let currentAudio = null;
 
-    // Handle when audio can play
-    const handleCanPlay = () => {
-      if (musicEnabled && audioRef.current) {
-        audioRef.current.play().catch((e) => {
-          console.log('Audio autoplay blocked, waiting for user interaction:', e.message);
+    const initMusic = async () => {
+      // Start with fallback music immediately
+      const fallbackUrl = getFallbackMusicUrl();
+      const audio = new Audio(fallbackUrl);
+      audio.loop = true;
+      audio.volume = musicVolume;
+      audio.preload = 'auto';
+      
+      if (!isMounted) return;
+      
+      audioRef.current = audio;
+      currentAudio = audio;
+
+      // Handle when audio can play
+      const handleCanPlay = () => {
+        if (musicEnabled && audioRef.current && isMounted) {
+          audioRef.current.play().catch((e) => {
+            console.log('Audio autoplay blocked:', e.message);
+          });
+        }
+      };
+
+      audio.addEventListener('canplaythrough', handleCanPlay);
+
+      // Try playing immediately
+      if (musicEnabled) {
+        audio.play().catch(() => {
+          console.log('Music will play after user interaction');
         });
+      }
+
+      // Try to generate ElevenLabs music in background
+      try {
+        const elevenLabsUrl = await generateElevenLabsMusic(userGenre);
+        if (isMounted && elevenLabsUrl && elevenLabsUrl !== fallbackUrl) {
+          // Switch to ElevenLabs generated music
+          const wasPlaying = !audioRef.current?.paused;
+          const currentTime = audioRef.current?.currentTime || 0;
+          
+          audioRef.current.pause();
+          audioRef.current.src = elevenLabsUrl;
+          audioRef.current.load();
+          
+          if (wasPlaying && musicEnabled) {
+            audioRef.current.play().catch(() => {});
+          }
+          console.log('🎵 Switched to ElevenLabs generated music!');
+        }
+      } catch (e) {
+        console.log('Using fallback music');
       }
     };
 
-    audio.addEventListener('canplaythrough', handleCanPlay);
-
-    // Also try playing immediately if browser allows
-    if (musicEnabled) {
-      audio.play().catch(() => {
-        console.log('Music will play after user interaction');
-      });
-    }
+    initMusic();
 
     // Add click handler to start music on first user interaction
     const startMusicOnInteraction = () => {
@@ -188,11 +243,13 @@ export default function Game() {
     document.addEventListener('keydown', startMusicOnInteraction);
 
     return () => {
-      audio.removeEventListener('canplaythrough', handleCanPlay);
+      isMounted = false;
       document.removeEventListener('click', startMusicOnInteraction);
       document.removeEventListener('keydown', startMusicOnInteraction);
-      audio.pause();
-      audio.src = '';
+      if (currentAudio) {
+        currentAudio.pause();
+        currentAudio.src = '';
+      }
     };
   }, [userGenre]);
 
@@ -307,13 +364,12 @@ export default function Game() {
             />
             
             <div className="mt-6 text-center">
-              <LargeButton
+              <button
                 onClick={() => setSelectedGame(null)}
-                variant="outline"
-                className="border-slate-600 text-white hover:bg-slate-800"
+                className="px-8 py-4 text-xl font-bold rounded-2xl border-4 border-amber-500 bg-slate-800 text-amber-400 hover:bg-amber-500 hover:text-white transition-all"
               >
-                Back to Games
-              </LargeButton>
+                ← Back to Games
+              </button>
             </div>
           </motion.div>
         ) : (

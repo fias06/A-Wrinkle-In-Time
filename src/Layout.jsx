@@ -200,13 +200,15 @@ export default function Layout({ children, currentPageName }) {
       {/* Spacer for bottom nav on mobile */}
       <div className="md:hidden h-24" />
 
-      {/* Global Fixed Voice Button - Bottom Left */}
-      <VoiceButton 
-        onCommand={handleGlobalVoiceCommand}
-        size="medium"
-        className=""
-        fixed={true}
-      />
+      {/* Global Fixed Voice Button - Bottom Left (hidden on Game page which has its own) */}
+      {currentPageName !== 'Game' && (
+        <VoiceButton 
+          onCommand={handleGlobalVoiceCommand}
+          size="medium"
+          className=""
+          fixed={true}
+        />
+      )}
     </div>
   );
 }
