@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
-import { appClient } from '@/api/appClient';
+import { useAuth } from '@/lib/authContext';
 import { Home, Users, Gamepad2, User, Menu, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from "@/lib/utils";
@@ -9,17 +9,11 @@ import VoiceButton from '@/components/voice/VoiceButton';
 
 export default function Layout({ children, currentPageName }) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const { isAuthenticated } = useAuth();
   const navigate = useNavigate();
 
-  useEffect(() => {
-    checkAuth();
-  }, []);
-
-  const checkAuth = async () => {
-    const auth = await appClient.auth.isAuthenticated();
-    setIsAuthenticated(auth);
-  };
+  // Pages that get minimal layout: no nav bar, no global voice button (voice only where needed)
+  const hideNav = ['VideoCall', 'Onboarding', 'Login'].includes(currentPageName);
 
   // Global voice command handler
   const handleGlobalVoiceCommand = useCallback((command) => {
@@ -70,9 +64,6 @@ export default function Layout({ children, currentPageName }) {
       window.history.back();
     }
   }, [navigate]);
-
-  // Pages without navigation
-  const hideNav = ['VideoCall', 'Onboarding'].includes(currentPageName);
 
   const navItems = [
     { name: 'Home', icon: Home, page: 'Home' },
@@ -200,13 +191,15 @@ export default function Layout({ children, currentPageName }) {
       {/* Spacer for bottom nav on mobile */}
       <div className="md:hidden h-24" />
 
-      {/* Global Fixed Voice Button - Bottom Left */}
-      <VoiceButton 
-        onCommand={handleGlobalVoiceCommand}
-        size="medium"
-        className=""
-        fixed={true}
-      />
+      {/* Global Voice Button - only after login, so it doesn't run on login page */}
+      {isAuthenticated && (
+        <VoiceButton
+          onCommand={handleGlobalVoiceCommand}
+          size="medium"
+          className=""
+          fixed={true}
+        />
+      )}
     </div>
   );
 }

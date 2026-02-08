@@ -3,8 +3,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Volume2, VolumeX } from 'lucide-react';
 import VoiceButton from './VoiceButton';
 import { cn } from "@/lib/utils";
+import { ELEVENLABS_API_KEY } from '@/lib/elevenlabs';
 
-const ELEVENLABS_API_KEY = 'sk_b2f7e426e2eef8b2f5f0b02d239a744c04068c80bc3c00a0';
 const ELEVENLABS_VOICE_ID = '21m00Tcm4TlvDq8ikWAM'; // Rachel - warm, friendly voice
 
 const VoiceAssistant = forwardRef(({ 
