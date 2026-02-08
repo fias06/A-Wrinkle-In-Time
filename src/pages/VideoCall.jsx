@@ -1,11 +1,32 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Video, VideoOff, Mic, MicOff, PhoneOff, ArrowLeft, Users, Gamepad2, MessageCircle } from 'lucide-react';
+import { Video, VideoOff, Mic, MicOff, PhoneOff, ArrowLeft, Users, Gamepad2, MessageCircle, X } from 'lucide-react';
 import { createPageUrl } from '@/utils';
 import VoiceButton from '@/components/voice/VoiceButton';
 import LargeButton from '@/components/ui/LargeButton';
-import CoopGame from '@/components/game/CoopGame';
+
+// Game configurations
+const GAMES = {
+  pond: {
+    id: 'pond',
+    name: '🐸 Pond Adventure',
+    src: '/pond-game/index.html',
+    voiceCommands: ['up', 'down', 'left', 'right']
+  },
+  rodent: {
+    id: 'rodent',
+    name: '🐿️ Rodent Rampage',
+    src: '/protecc-the-prosciutt/index.html',
+    voiceCommands: ['left', 'right', 'shoot', 'fire', 'start']
+  },
+  bridge: {
+    id: 'bridge',
+    name: '🌉 Bridge Builder',
+    src: '/bridge_deployable/index.html',
+    voiceCommands: ['left', 'right', 'down', 'drop', 'rotate']
+  }
+};
 
 export default function VideoCall() {
   const navigate = useNavigate();
@@ -14,12 +35,14 @@ export default function VideoCall() {
   const partnerId = searchParams.get('userId');
   
   const localVideoRef = useRef(null);
+  const gameIframeRef = useRef(null);
   const [localStream, setLocalStream] = useState(null);
   const [isVideoOn, setIsVideoOn] = useState(true);
   const [isMuted, setIsMuted] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(true);
   const [showGame, setShowGame] = useState(false);
+  const [selectedGame, setSelectedGame] = useState(null); // null = selection, 'pond' or 'rodent' = playing
   const [callDuration, setCallDuration] = useState(0);
   const [cameraError, setCameraError] = useState(null);
 
@@ -109,6 +132,28 @@ export default function VideoCall() {
   const handleVoiceCommand = (command) => {
     const cmd = command.toLowerCase();
     console.log('Voice command:', cmd);
+
+    // Game controls - check if game is active and handle game-specific commands
+    if (showGame && selectedGame && gameIframeRef.current) {
+      const gameCommands = ['up', 'down', 'left', 'right', 'shoot', 'fire', 'start', 'drop', 'rotate'];
+      for (const action of gameCommands) {
+        if (cmd.includes(action)) {
+          // Check for player specification (e.g., "player one left", "player 2 up")
+          let player = 2; // default to player 2
+          if (cmd.includes('player one') || cmd.includes('player 1') || cmd.includes('first')) {
+            player = 1;
+          }
+          
+          gameIframeRef.current.contentWindow.postMessage({
+            type: 'voice-command',
+            action: action,
+            player: player
+          }, '*');
+          console.log(`Sent ${action} command to ${selectedGame} game for player ${player}`);
+          return; // Game command handled
+        }
+      }
+    }
 
     // Mute/unmute
     if (cmd.includes('mute') && !cmd.includes('unmute')) {
@@ -209,15 +254,6 @@ export default function VideoCall() {
               </div>
               <p className="text-3xl text-white font-medium mb-2">{partnerName}</p>
               <p className="text-slate-400 text-lg">Video call connected</p>
-              
-              {/* Simulated video placeholder message */}
-              <div className="mt-8 bg-slate-700/50 rounded-2xl p-4 max-w-md mx-auto">
-                <p className="text-slate-300 text-sm">
-                  🎥 In a real implementation, your friend's video would appear here.
-                  <br />
-                  This is a demo showing your camera working!
-                </p>
-              </div>
             </motion.div>
           ) : null}
         </div>
@@ -264,24 +300,69 @@ export default function VideoCall() {
             animate={{ opacity: 1, y: 0 }}
             className="absolute inset-x-4 top-32 bottom-44 bg-slate-900/95 rounded-3xl p-4 z-20"
           >
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xl text-white font-bold flex items-center gap-2">
-                <Gamepad2 className="w-6 h-6 text-amber-500" />
-                Co-op Game with {partnerName}
-              </h3>
-              <button
-                onClick={() => setShowGame(false)}
-                className="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-lg transition-colors"
-              >
-                Close Game
-              </button>
-            </div>
-            <CoopGame
-              isPlayer1={true}
-              onGameAction={() => {}}
-              remoteAction={null}
-              className="h-full"
-            />
+            {selectedGame ? (
+              <>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-xl text-white font-bold flex items-center gap-2">
+                    <Gamepad2 className="w-6 h-6 text-amber-500" />
+                    {GAMES[selectedGame].name} with {partnerName}
+                  </h3>
+                  <div className="flex gap-2 items-center">
+                    <div className="text-sm text-slate-400 mr-2">
+                      🎤 Voice: {GAMES[selectedGame].voiceCommands.join(', ')}
+                    </div>
+                    <button
+                      onClick={() => setSelectedGame(null)}
+                      className="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-lg transition-colors"
+                    >
+                      Switch Game
+                    </button>
+                    <button
+                      onClick={() => { setShowGame(false); setSelectedGame(null); }}
+                      className="bg-red-600 hover:bg-red-700 text-white p-2 rounded-lg transition-colors"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+                </div>
+                <iframe
+                  ref={gameIframeRef}
+                  src={GAMES[selectedGame].src}
+                  title={GAMES[selectedGame].name}
+                  className="w-full h-full rounded-2xl"
+                  style={{ border: 'none' }}
+                  allow="autoplay"
+                />
+              </>
+            ) : (
+              <>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-xl text-white font-bold flex items-center gap-2">
+                    <Gamepad2 className="w-6 h-6 text-amber-500" />
+                    Choose a Game to Play with {partnerName}
+                  </h3>
+                  <button
+                    onClick={() => setShowGame(false)}
+                    className="bg-red-600 hover:bg-red-700 text-white p-2 rounded-lg transition-colors"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+                <div className="grid grid-cols-3 gap-4 h-full">
+                  {Object.values(GAMES).map((game) => (
+                    <button
+                      key={game.id}
+                      onClick={() => setSelectedGame(game.id)}
+                      className="bg-slate-800 hover:bg-slate-700 border-4 border-slate-600 hover:border-amber-500 rounded-2xl p-4 transition-all flex flex-col items-center justify-center gap-3"
+                    >
+                      <span className="text-3xl">{game.name.split(' ')[0]}</span>
+                      <span className="text-lg font-bold text-white text-center">{game.name.slice(2)}</span>
+                      <span className="text-amber-400 font-semibold text-sm">Click to Play!</span>
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
           </motion.div>
         )}
 

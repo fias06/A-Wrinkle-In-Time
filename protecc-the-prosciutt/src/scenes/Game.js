@@ -240,6 +240,34 @@ initPlayer() {
       right: Phaser.Input.Keyboard.KeyCodes.D,
       fire: Phaser.Input.Keyboard.KeyCodes.W,
     });
+
+    // Voice command listener for accessibility
+    window.addEventListener('message', (event) => {
+      if (event.data && event.data.type === 'voice-command') {
+        const action = event.data.action;
+        const playerNum = event.data.player || 2; // default to player 2
+        
+        const player = playerNum === 1 ? this.player1 : this.player2;
+        if (!player || !player.active) return;
+        
+        if (action === 'left') {
+          player.body.velocity.x = -player.maxVelocity;
+          // Auto-stop after brief movement
+          this.time.delayedCall(200, () => {
+            if (player.body) player.body.velocity.x = 0;
+          });
+        } else if (action === 'right') {
+          player.body.velocity.x = player.maxVelocity;
+          this.time.delayedCall(200, () => {
+            if (player.body) player.body.velocity.x = 0;
+          });
+        } else if (action === 'shoot' || action === 'fire') {
+          player.tryFire();
+        } else if (action === 'start') {
+          this.startGame();
+        }
+      }
+    });
   }
 
   handlePlayer(player, keys) {

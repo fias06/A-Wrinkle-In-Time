@@ -134,6 +134,32 @@ export class Game extends Phaser.Scene {
       "Both players must stand on the lily pad at the same time to open the door. Once the door is open, reach the lotus flower to win.",
       { fontFamily: "Arial", fontSize: "20px", color: "#ffffff" }
     );
+
+    // Voice command listener for accessibility
+    window.addEventListener('message', (event) => {
+      if (event.data && event.data.type === 'voice-command') {
+        const action = event.data.action;
+        const player = event.data.player || 2; // default to player 2 (arrow keys)
+        
+        if (player === 1) {
+          // Player 1 commands (WASD mapping)
+          if (!this.p1.moving) {
+            if (action === 'up') this.tryMove(this.p1, -1, 0);
+            else if (action === 'down') this.tryMove(this.p1, 1, 0);
+            else if (action === 'left') this.tryMove(this.p1, 0, -1);
+            else if (action === 'right') this.tryMove(this.p1, 0, 1);
+          }
+        } else {
+          // Player 2 commands (Arrow keys mapping)
+          if (!this.p2.moving) {
+            if (action === 'up') this.tryMove(this.p2, -1, 0);
+            else if (action === 'down') this.tryMove(this.p2, 1, 0);
+            else if (action === 'left') this.tryMove(this.p2, 0, -1);
+            else if (action === 'right') this.tryMove(this.p2, 0, 1);
+          }
+        }
+      }
+    });
   }
 
   update() {

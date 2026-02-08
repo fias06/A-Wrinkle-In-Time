@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, ArrowRight, Check, User, Globe, Heart, Music, Camera, RefreshCw } from 'lucide-react';
 import { createPageUrl } from '@/utils';
-import { appClient } from '@/api/base44Client';
+import { appClient } from '@/api/appClient';
 import VoiceButton from '@/components/voice/VoiceButton';
 import LargeButton from '@/components/ui/LargeButton';
 import InterestTag from '@/components/matching/InterestTag';

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Search, RefreshCw, Filter, Users, Loader2, UserCheck, UserMinus } from 'lucide-react';
 import { createPageUrl } from '@/utils';
-import { appClient } from '@/api/base44Client';
+import { appClient } from '@/api/appClient';
 import { useQuery } from '@tanstack/react-query';
 import UserCard from '@/components/matching/UserCard';
 import LargeButton from '@/components/ui/LargeButton';

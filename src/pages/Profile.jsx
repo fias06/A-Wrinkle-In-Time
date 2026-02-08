@@ -6,7 +6,7 @@ import {
   Globe, Heart, Clock, RefreshCw
 } from 'lucide-react';
 import { createPageUrl } from '@/utils';
-import { appClient } from '@/api/base44Client';
+import { appClient } from '@/api/appClient';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import LargeButton from '@/components/ui/LargeButton';
 import InterestTag from '@/components/matching/InterestTag';

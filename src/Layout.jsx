@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
-import { appClient } from '@/api/base44Client';
+import { appClient } from '@/api/appClient';
 import { Home, Users, Gamepad2, User, Menu, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from "@/lib/utils";
