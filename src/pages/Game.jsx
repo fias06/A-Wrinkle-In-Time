@@ -7,7 +7,8 @@ import LargeButton from '@/components/ui/LargeButton';
 import VoiceButton from '@/components/voice/VoiceButton';
 
 // ElevenLabs API key from environment
-const ELEVEN_LABS_API_KEY = import.meta.env.VITE_ELEVEN_LABS_API_KEY || 'sk_b2f7e426e2eef8b2f5f0b02d239a744c04068c80bc3c00a0';
+const ELEVEN_LABS_API_KEY = import.meta.env.VITE_ELEVEN_LABS_API_KEY;
+const ELEVEN_LABS_VOICE_ID = '21m00Tcm4TlvDq8ikWAM'; // Rachel - warm, friendly voice
 
 // Genre prompts for ElevenLabs sound generation
 const GENRE_PROMPTS = {
@@ -78,6 +79,105 @@ export default function Game() {
   const [userGenre, setUserGenre] = useState('lofi');
   const audioRef = useRef(null);
   const iframeRef = useRef(null);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const speakQueueRef = useRef([]);
+
+  // Browser TTS fallback
+  const speakWithBrowserTTS = (text) => {
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.rate = 0.9;
+      utterance.pitch = 1;
+      utterance.volume = 1;
+      window.speechSynthesis.speak(utterance);
+    }
+  };
+
+  // ElevenLabs text-to-speech function with fallback
+  const speakWithElevenLabs = async (text) => {
+    if (!text) return;
+    
+    console.log('🔊 Game speaking:', text);
+
+    if (!ELEVEN_LABS_API_KEY) {
+      console.log('⚠️ No API key, using browser TTS');
+      speakWithBrowserTTS(text);
+      return;
+    }
+
+    if (isSpeaking) {
+      speakQueueRef.current.push(text);
+      return;
+    }
+
+    setIsSpeaking(true);
+    try {
+      console.log('📡 Game calling ElevenLabs API...');
+      const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${ELEVEN_LABS_VOICE_ID}`, {
+        method: 'POST',
+        headers: {
+          'Accept': 'audio/mpeg',
+          'Content-Type': 'application/json',
+          'xi-api-key': ELEVEN_LABS_API_KEY
+        },
+        body: JSON.stringify({
+          text: text,
+          model_id: 'eleven_monolingual_v1',
+          voice_settings: {
+            stability: 0.5,
+            similarity_boost: 0.75
+          }
+        })
+      });
+
+      console.log('📡 Response status:', response.status);
+
+      if (!response.ok) {
+        console.log('❌ ElevenLabs TTS error, using browser fallback');
+        setIsSpeaking(false);
+        speakWithBrowserTTS(text);
+        return;
+      }
+
+      const audioBlob = await response.blob();
+      console.log('🎵 Audio blob size:', audioBlob.size);
+      
+      const audioUrl = URL.createObjectURL(audioBlob);
+      const audio = new Audio(audioUrl);
+      
+      // Lower background music while speaking
+      if (audioRef.current) audioRef.current.volume = musicVolume * 0.3;
+
+      audio.onended = () => {
+        console.log('✅ Audio finished playing');
+        setIsSpeaking(false);
+        URL.revokeObjectURL(audioUrl);
+        if (audioRef.current) audioRef.current.volume = musicVolume;
+        if (speakQueueRef.current.length > 0) {
+          const next = speakQueueRef.current.shift();
+          speakWithElevenLabs(next);
+        }
+      };
+
+      audio.onerror = (e) => {
+        console.log('❌ Audio error:', e);
+        setIsSpeaking(false);
+        URL.revokeObjectURL(audioUrl);
+        if (audioRef.current) audioRef.current.volume = musicVolume;
+        speakWithBrowserTTS(text);
+      };
+
+      console.log('▶️ Attempting to play audio...');
+      await audio.play();
+      console.log('✅ Audio play started');
+    } catch (error) {
+      console.log('❌ ElevenLabs speak error:', error);
+      setIsSpeaking(false);
+      if (audioRef.current) audioRef.current.volume = musicVolume;
+      speakWithBrowserTTS(text);
+    }
+  };
 
   // Voice command handler for games
   const handleVoiceCommand = (command) => {
@@ -109,6 +209,23 @@ export default function Game() {
         
         console.log(`🎮 Sending ${action} to game for player ${player}`);
         iframeRef.current.contentWindow.postMessage({ type: 'voice-command', action, player }, '*');
+        
+        // Speak feedback for the action
+        const actionFeedback = {
+          'left': 'Moving left',
+          'right': 'Moving right',
+          'up': 'Moving up',
+          'down': 'Moving down',
+          'shoot': 'Shooting!',
+          'drop': 'Dropping piece',
+          'rotate': 'Rotating',
+          'start': 'Starting game!',
+          'pause': 'Game paused',
+          'restart': 'Restarting game'
+        };
+        if (actionFeedback[action]) {
+          speakWithElevenLabs(actionFeedback[action]);
+        }
       }
     }
 

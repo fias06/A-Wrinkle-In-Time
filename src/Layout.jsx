@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 import { appClient } from '@/api/appClient';
@@ -7,10 +7,126 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from "@/lib/utils";
 import VoiceButton from '@/components/voice/VoiceButton';
 
+// ElevenLabs configuration
+const ELEVEN_LABS_API_KEY = import.meta.env.VITE_ELEVEN_LABS_API_KEY;
+const ELEVEN_LABS_VOICE_ID = '21m00Tcm4TlvDq8ikWAM'; // Rachel voice
+
+// Page descriptions for voice announcements
+const PAGE_ANNOUNCEMENTS = {
+  'Home': 'Welcome to A Wrinkle in Time. Find friends, play games, and connect with others.',
+  'FindFriends': 'Find Friends page. Browse and connect with people who share your interests.',
+  'Game': 'Play Games. Choose a game to play solo or with a friend.',
+  'Profile': 'Your Profile. View and edit your personal information and preferences.',
+  'VideoCall': 'Video Call. Connecting you with your friend.',
+  'Onboarding': 'Welcome! Let\'s set up your profile.'
+};
+
 export default function Layout({ children, currentPageName }) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const lastAnnouncedPage = useRef(null);
   const navigate = useNavigate();
+
+  // Fallback to browser speech synthesis
+  const speakWithBrowserTTS = useCallback((text) => {
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.rate = 0.9;
+      utterance.pitch = 1;
+      utterance.volume = 1;
+      window.speechSynthesis.speak(utterance);
+    }
+  }, []);
+
+  // ElevenLabs text-to-speech function with fallback
+  const speakWithElevenLabs = useCallback(async (text) => {
+    if (!text) return;
+    
+    console.log('🔊 Speaking:', text);
+    console.log('🔑 API Key exists:', !!ELEVEN_LABS_API_KEY);
+
+    // If no API key or already speaking, use browser fallback
+    if (!ELEVEN_LABS_API_KEY) {
+      console.log('⚠️ No API key, using browser TTS');
+      speakWithBrowserTTS(text);
+      return;
+    }
+
+    if (isSpeaking) {
+      console.log('⚠️ Already speaking, skipping');
+      return;
+    }
+
+    setIsSpeaking(true);
+    try {
+      console.log('📡 Calling ElevenLabs API...');
+      const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${ELEVEN_LABS_VOICE_ID}`, {
+        method: 'POST',
+        headers: {
+          'Accept': 'audio/mpeg',
+          'Content-Type': 'application/json',
+          'xi-api-key': ELEVEN_LABS_API_KEY
+        },
+        body: JSON.stringify({
+          text: text,
+          model_id: 'eleven_monolingual_v1',
+          voice_settings: {
+            stability: 0.5,
+            similarity_boost: 0.75
+          }
+        })
+      });
+
+      console.log('📡 Response status:', response.status);
+
+      if (!response.ok) {
+        console.log('❌ ElevenLabs API error, using browser TTS fallback');
+        setIsSpeaking(false);
+        speakWithBrowserTTS(text);
+        return;
+      }
+
+      const audioBlob = await response.blob();
+      console.log('🎵 Audio blob size:', audioBlob.size);
+      
+      const audioUrl = URL.createObjectURL(audioBlob);
+      const audio = new Audio(audioUrl);
+
+      audio.onended = () => {
+        console.log('✅ Audio finished playing');
+        setIsSpeaking(false);
+        URL.revokeObjectURL(audioUrl);
+      };
+
+      audio.onerror = (e) => {
+        console.log('❌ Audio error:', e);
+        setIsSpeaking(false);
+        URL.revokeObjectURL(audioUrl);
+        speakWithBrowserTTS(text);
+      };
+
+      audio.oncanplaythrough = () => {
+        console.log('🎵 Audio ready to play');
+      };
+
+      console.log('▶️ Attempting to play audio...');
+      await audio.play();
+      console.log('✅ Audio play started');
+    } catch (error) {
+      console.log('❌ ElevenLabs speak error:', error);
+      setIsSpeaking(false);
+      speakWithBrowserTTS(text);
+    }
+  }, [isSpeaking, speakWithBrowserTTS]);
+
+  // Announce page when it changes (only for voice-navigated pages)
+  const announceAndNavigate = useCallback((pageName) => {
+    const announcement = PAGE_ANNOUNCEMENTS[pageName] || `Navigating to ${pageName}`;
+    speakWithElevenLabs(announcement);
+    navigate(createPageUrl(pageName));
+  }, [navigate, speakWithElevenLabs]);
 
   useEffect(() => {
     checkAuth();
@@ -26,30 +142,34 @@ export default function Layout({ children, currentPageName }) {
     const cmd = command.toLowerCase();
     console.log('🎤 Global command:', cmd);
 
-    // Navigation commands
+    // Navigation commands with voice announcements
     if (cmd.includes('home') || cmd.includes('main')) {
-      navigate(createPageUrl('Home'));
+      announceAndNavigate('Home');
     } else if (cmd.includes('find') || cmd.includes('friends') || cmd.includes('connect')) {
-      navigate(createPageUrl('FindFriends'));
+      announceAndNavigate('FindFriends');
     } else if (cmd.includes('game') || cmd.includes('play')) {
-      navigate(createPageUrl('Game'));
+      announceAndNavigate('Game');
     } else if (cmd.includes('profile') || cmd.includes('settings')) {
-      navigate(createPageUrl('Profile'));
+      announceAndNavigate('Profile');
     } else if (cmd.includes('video') || cmd.includes('call')) {
-      navigate(createPageUrl('VideoCall'));
+      announceAndNavigate('VideoCall');
     }
     // Scroll commands
     else if (cmd.includes('scroll up') || cmd.includes('go up')) {
+      speakWithElevenLabs('Scrolling up');
       window.scrollBy({ top: -400, behavior: 'smooth' });
     } else if (cmd.includes('scroll down') || cmd.includes('go down')) {
+      speakWithElevenLabs('Scrolling down');
       window.scrollBy({ top: 400, behavior: 'smooth' });
     } else if (cmd === 'up') {
       window.scrollBy({ top: -300, behavior: 'smooth' });
     } else if (cmd === 'down') {
       window.scrollBy({ top: 300, behavior: 'smooth' });
     } else if (cmd.includes('top') || cmd.includes('beginning')) {
+      speakWithElevenLabs('Going to top of page');
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } else if (cmd.includes('bottom') || cmd.includes('end')) {
+      speakWithElevenLabs('Going to bottom of page');
       window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
     }
     // Click commands
@@ -67,9 +187,15 @@ export default function Layout({ children, currentPageName }) {
     }
     // Back command
     else if (cmd.includes('back') || cmd.includes('previous')) {
+      speakWithElevenLabs('Going back');
       window.history.back();
     }
-  }, [navigate]);
+    // Help command - read current page info
+    else if (cmd.includes('help') || cmd.includes('where am i') || cmd.includes('what page')) {
+      const announcement = PAGE_ANNOUNCEMENTS[currentPageName] || `You are on the ${currentPageName} page`;
+      speakWithElevenLabs(announcement);
+    }
+  }, [announceAndNavigate, speakWithElevenLabs, currentPageName]);
 
   // Pages without navigation
   const hideNav = ['VideoCall', 'Onboarding'].includes(currentPageName);
