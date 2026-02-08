@@ -75,7 +75,7 @@ export default function VoiceButton({
           clearTimeout(restartTimeoutRef.current);
           restartTimeoutRef.current = setTimeout(() => {
             tryStart();
-          }, 100);
+          }, 150);
         }
       };
 
@@ -83,9 +83,13 @@ export default function VoiceButton({
         console.log('🎤 Error:', event.error);
         setIsListening(false);
         
+        // Don't restart on 'aborted' - that's intentional
+        if (event.error === 'aborted') return;
+        
         // Restart on any error unless paused
         if (shouldBeListeningRef.current) {
-          const delay = event.error === 'no-speech' ? 100 : 500;
+          const delay = event.error === 'no-speech' ? 150 : 
+                       event.error === 'network' ? 1000 : 500;
           clearTimeout(restartTimeoutRef.current);
           restartTimeoutRef.current = setTimeout(() => {
             tryStart();
@@ -169,7 +173,8 @@ export default function VoiceButton({
             setTranscript(interimTranscript || finalTranscript);
             if (finalTranscript) {
               console.log('🗣️ HEARD:', finalTranscript);
-              onCommand?.(finalTranscript.toLowerCase().trim());
+              // Use ref to avoid stale closure crash
+              onCommandRef.current?.(finalTranscript.toLowerCase().trim());
               setTimeout(() => setTranscript(''), 2000);
             }
           };
@@ -181,10 +186,12 @@ export default function VoiceButton({
             }
           };
           
-          recognition.onerror = () => {
+          recognition.onerror = (event) => {
+            console.log('🎤 Recognition error:', event.error);
             setIsListening(false);
-            if (shouldBeListeningRef.current) {
-              setTimeout(createAndStart, 300);
+            if (shouldBeListeningRef.current && event.error !== 'aborted') {
+              const delay = event.error === 'no-speech' ? 100 : 500;
+              setTimeout(createAndStart, delay);
             }
           };
           

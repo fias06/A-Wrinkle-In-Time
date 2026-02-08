@@ -155,20 +155,42 @@ export default function Game() {
     const audio = new Audio(getMusicUrl());
     audio.loop = true;
     audio.volume = musicVolume;
+    audio.preload = 'auto';
     audioRef.current = audio;
 
-    // Try to play music (may be blocked by browser until user interaction)
-    if (musicEnabled) {
-      const playPromise = audio.play();
-      if (playPromise !== undefined) {
-        playPromise.catch(() => {
-          // Auto-play was prevented, will play on user interaction
-          console.log('Music will play after user interaction');
+    // Handle when audio can play
+    const handleCanPlay = () => {
+      if (musicEnabled && audioRef.current) {
+        audioRef.current.play().catch((e) => {
+          console.log('Audio autoplay blocked, waiting for user interaction:', e.message);
         });
       }
+    };
+
+    audio.addEventListener('canplaythrough', handleCanPlay);
+
+    // Also try playing immediately if browser allows
+    if (musicEnabled) {
+      audio.play().catch(() => {
+        console.log('Music will play after user interaction');
+      });
     }
 
+    // Add click handler to start music on first user interaction
+    const startMusicOnInteraction = () => {
+      if (musicEnabled && audioRef.current && audioRef.current.paused) {
+        audioRef.current.play().catch(() => {});
+      }
+      document.removeEventListener('click', startMusicOnInteraction);
+      document.removeEventListener('keydown', startMusicOnInteraction);
+    };
+    document.addEventListener('click', startMusicOnInteraction);
+    document.addEventListener('keydown', startMusicOnInteraction);
+
     return () => {
+      audio.removeEventListener('canplaythrough', handleCanPlay);
+      document.removeEventListener('click', startMusicOnInteraction);
+      document.removeEventListener('keydown', startMusicOnInteraction);
       audio.pause();
       audio.src = '';
     };
