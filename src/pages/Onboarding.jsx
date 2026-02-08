@@ -1,3 +1,4 @@
+// @ts-nocheck
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -9,6 +10,8 @@ import LargeButton from '@/components/ui/LargeButton';
 import InterestTag from '@/components/matching/InterestTag';
 import AccessibleCard from '@/components/ui/AccessibleCard';
 import { Input } from "@/components/ui/input";
+import { supabase } from '@/lib/supabaseClient';
+import { useAuth } from '@/lib/authContext';
 
 const INTERESTS = [
   'Gardening', 'Chess', 'History', 'Music', 'Cooking',
@@ -43,6 +46,7 @@ const STEPS = [
 ];
 
 export default function Onboarding() {
+  const { user } = useAuth();
   const navigate = useNavigate();
   const [currentStep, setCurrentStep] = useState(0);
   const [formData, setFormData] = useState({
@@ -231,31 +235,31 @@ export default function Onboarding() {
   }, []);
 
   const loadExistingProfile = async () => {
+    if (!user?.id) return;
+  
     try {
-      // Check localStorage first for offline support
-      const localProfile = localStorage.getItem('userProfile');
-      if (localProfile) {
-        const profile = JSON.parse(localProfile);
-        if (profile.onboarding_complete) {
-          navigate(createPageUrl('FindFriends'));
-          return;
-        }
-      }
-      
-      // Try to load from backend if available
-      try {
-        const profiles = await appClient.entities.UserProfile.list();
-        if (profiles.length > 0 && profiles[0].onboarding_complete) {
-          localStorage.setItem('userProfile', JSON.stringify(profiles[0]));
-          navigate(createPageUrl('FindFriends'));
-        }
-      } catch (e) {
-        // Backend not available, continue with local storage
+      // 1. Check Supabase profiles table
+      const { data: profile, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .single();
+  
+      if (profile?.onboarding_complete) {
+        localStorage.setItem('userProfile', JSON.stringify(profile));
+        navigate(createPageUrl('FindFriends'));
       }
     } catch (e) {
-      // No profile yet
+      console.log("No existing profile found in Supabase.");
     }
   };
+  
+  // Update your useEffect to trigger when the 'user' object is available
+  useEffect(() => {
+    if (user) {
+      loadExistingProfile();
+    }
+  }, [user]);
 
   useEffect(() => {
     // Can add TTS later if needed
@@ -350,38 +354,36 @@ export default function Onboarding() {
     }
   };
 
+  // 🟢 The SAFE way to save in Onboarding.jsx
   const saveProfile = async () => {
+    if (!user?.id) return;
     setIsLoading(true);
+  
     try {
-      const profileData = {
-        ...formData,
-        id: Date.now().toString(),
-        onboarding_complete: true,
-        is_online: true,
-        last_active: new Date().toISOString()
-      };
-
-      // Save to localStorage for offline support
-      localStorage.setItem('userProfile', JSON.stringify(profileData));
-
-      // Try to save to backend if available
-      try {
-        const existingProfiles = await appClient.entities.UserProfile.list();
-        if (existingProfiles.length > 0) {
-          await appClient.entities.UserProfile.update(existingProfiles[0].id, profileData);
-        } else {
-          await appClient.entities.UserProfile.create(profileData);
-        }
-      } catch (e) {
-        // Backend not available, but we saved to localStorage so continue
-        console.log('Backend not available, using local storage');
-      }
-
-      setTimeout(() => {
-        navigate(createPageUrl('FindFriends'));
-      }, 1000);
+      // 🟢 Use UPSERT instead of UPDATE
+      // This handles the "Wiped Table" issue by creating the row on the fly
+      const { error } = await supabase
+        .from('profiles')
+        .upsert({
+          id: user.id, // 👈 Must include ID for upsert to work
+          display_name: formData.display_name,
+          interests: formData.interests,
+          music_genre: formData.music_genre,
+          language: formData.language,
+          avatar_url: formData.avatar_url,
+          bio: formData.bio,
+          onboarding_complete: true,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'id' });
+  
+      if (error) throw error;
+  
+      // Update local state and move on
+      localStorage.setItem('userProfile', JSON.stringify(formData));
+      navigate('/FindFriends');
     } catch (error) {
-      console.error('Error saving profile:', error);
+      console.error("Critical Save Error:", error.message);
+      alert("Could not save profile: " + error.message);
     } finally {
       setIsLoading(false);
     }

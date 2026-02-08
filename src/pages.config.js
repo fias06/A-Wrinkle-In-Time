@@ -48,6 +48,7 @@
  * The mainPage value must match a key in the PAGES object exactly.
  */
 import Home from './pages/Home';
+import Login from './pages/Login';
 import Onboarding from './pages/Onboarding';
 import FindFriends from './pages/FindFriends';
 import VideoCall from './pages/VideoCall';
@@ -58,6 +59,7 @@ import __Layout from './Layout.jsx';
 
 export const PAGES = {
     "Home": Home,
+    "Login": Login,
     "Onboarding": Onboarding,
     "FindFriends": FindFriends,
     "VideoCall": VideoCall,

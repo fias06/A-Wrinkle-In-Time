@@ -1,3 +1,4 @@
+// @ts-nocheck
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -5,6 +6,8 @@ import { Users, Gamepad2, Heart, ArrowRight, Sparkles } from 'lucide-react';
 import { createPageUrl } from '@/utils';
 import LargeButton from '@/components/ui/LargeButton';
 import AccessibleCard from '@/components/ui/AccessibleCard';
+import { useAuth } from '@/lib/authContext';
+
 
 export default function Home() {
   const navigate = useNavigate();
@@ -135,7 +138,7 @@ export default function Home() {
               <LargeButton 
                 variant="primary" 
                 icon={Users}
-                onClick={() => navigate(createPageUrl('Onboarding'))}
+                onClick={() => navigate('/login')}
               >
                 Get Started Free
               </LargeButton>
