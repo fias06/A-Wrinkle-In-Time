@@ -1,156 +1,118 @@
-import React, { useState, useEffect, useCallback, forwardRef, useImperativeHandle } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Volume2, VolumeX } from 'lucide-react';
-import VoiceButton from './VoiceButton';
-import { cn } from "@/lib/utils";
+// @ts-nocheck
+import React, { useState, useEffect, useImperativeHandle, forwardRef } from 'react';
+import { Mic, MicOff } from 'lucide-react';
+import PropTypes from 'prop-types'; // Import PropTypes
 
-const VoiceAssistant = forwardRef(({ 
-  onCommand,
-  greeting,
-  showButton = true,
-  className 
-}, ref) => {
+const VoiceAssistant = forwardRef(({ greeting, onCommand, compact = false }, ref) => {
   const [isListening, setIsListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
-  const [currentMessage, setCurrentMessage] = useState('');
-  const [isMuted, setIsMuted] = useState(false);
 
-  const speak = useCallback((text) => {
-    if (isMuted || !text) return Promise.resolve();
-    
-    return new Promise((resolve) => {
-      if ('speechSynthesis' in window) {
-        window.speechSynthesis.cancel();
-        
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.rate = 0.85;
-        utterance.pitch = 1;
-        utterance.volume = 1;
-        
-        // Try to get a friendly voice
-        const voices = window.speechSynthesis.getVoices();
-        const preferredVoice = voices.find(v => 
-          v.name.includes('Samantha') || 
-          v.name.includes('Karen') ||
-          v.name.includes('Google UK English Female')
-        );
-        if (preferredVoice) utterance.voice = preferredVoice;
-        
-        setCurrentMessage(text);
-        setIsSpeaking(true);
-        
-        utterance.onend = () => {
-          setIsSpeaking(false);
-          setCurrentMessage('');
-          resolve();
-        };
-        
-        utterance.onerror = () => {
-          setIsSpeaking(false);
-          setCurrentMessage('');
-          resolve();
-        };
-        
-        window.speechSynthesis.speak(utterance);
-      } else {
-        resolve();
-      }
-    });
-  }, [isMuted]);
-
+  // Expose "speak" method to parent
   useImperativeHandle(ref, () => ({
-    speak,
-    stopSpeaking: () => {
-      if ('speechSynthesis' in window) {
-        window.speechSynthesis.cancel();
-      }
-      setIsSpeaking(false);
-      setCurrentMessage('');
-    }
+    speak: (text) => speakText(text)
   }));
 
+  // Speak the greeting when it changes (and isn't empty)
   useEffect(() => {
-    // Load voices
-    if ('speechSynthesis' in window) {
-      window.speechSynthesis.getVoices();
+    if (greeting && greeting.trim() !== '') {
+      speakText(greeting);
     }
+  }, [greeting]);
+
+  const speakText = (text) => {
+    if (!text) return;
     
-    // Play greeting on mount
-    if (greeting) {
-      const timer = setTimeout(() => {
-        speak(greeting);
-      }, 500);
-      return () => clearTimeout(timer);
+    // Cancel current speech to avoid overlapping
+    window.speechSynthesis.cancel();
+    setIsSpeaking(true);
+
+    const utterance = new SpeechSynthesisUtterance(text);
+    
+    utterance.onend = () => setIsSpeaking(false);
+    window.speechSynthesis.speak(utterance);
+  };
+
+  const toggleListening = () => {
+    if (isListening) {
+      stopListening();
+    } else {
+      startListening();
     }
-  }, [greeting, speak]);
+  };
+
+  const startListening = () => {
+    // Check browser support safely
+    const SpeechRecognition = window.webkitSpeechRecognition || window.SpeechRecognition;
+
+    if (!SpeechRecognition) {
+      alert("Browser does not support voice recognition");
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.lang = 'en-US';
+
+    recognition.onstart = () => setIsListening(true);
+    recognition.onend = () => setIsListening(false);
+    
+    recognition.onresult = (event) => {
+      const command = event.results[0][0].transcript;
+      console.log("Voice Command:", command);
+      if (onCommand) {
+        onCommand(command);
+      }
+    };
+
+    recognition.start();
+  };
+
+  const stopListening = () => {
+    setIsListening(false);
+  };
+
+  if (compact) {
+    return (
+      <button 
+        onClick={toggleListening}
+        className={`p-2 rounded-full transition-all shadow-lg ${
+          isListening ? 'bg-red-500 animate-pulse' : 'bg-slate-700'
+        }`}
+      >
+        {isListening ? <Mic className="w-5 h-5 text-white" /> : <MicOff className="w-5 h-5 text-white" />}
+      </button>
+    );
+  }
 
   return (
-    <div className={cn("flex flex-col items-center", className)}>
-      {/* Speaking indicator */}
-      <AnimatePresence>
-        {isSpeaking && currentMessage && (
-          <motion.div
-            initial={{ opacity: 0, y: 20, scale: 0.9 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -20, scale: 0.9 }}
-            className="mb-8 max-w-lg mx-auto"
-          >
-            <div className="bg-gradient-to-br from-slate-800 to-slate-900 text-white px-8 py-6 rounded-3xl shadow-2xl">
-              <div className="flex items-start gap-4">
-                <motion.div
-                  animate={{ scale: [1, 1.2, 1] }}
-                  transition={{ duration: 1, repeat: Infinity }}
-                  className="p-3 bg-amber-500 rounded-full flex-shrink-0"
-                >
-                  <Volume2 className="w-6 h-6" />
-                </motion.div>
-                <p className="text-2xl leading-relaxed font-medium">
-                  {currentMessage}
-                </p>
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Voice button */}
-      {showButton && (
-        <VoiceButton
-          onCommand={onCommand}
-          isListening={isListening}
-          setIsListening={setIsListening}
-          size="large"
-        />
-      )}
-
-      {/* Mute toggle */}
-      <button
-        onClick={() => setIsMuted(!isMuted)}
-        className={cn(
-          "mt-6 flex items-center gap-2 px-4 py-2 rounded-full transition-all",
-          "text-lg font-medium",
-          isMuted 
-            ? "bg-slate-200 text-slate-600" 
-            : "bg-amber-100 text-amber-700"
-        )}
-        aria-label={isMuted ? "Unmute voice assistant" : "Mute voice assistant"}
+    <div className="bg-white/90 backdrop-blur-sm p-4 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4">
+      <button 
+        onClick={toggleListening}
+        className={`p-4 rounded-full transition-all ${
+          isListening ? 'bg-red-500 text-white animate-pulse shadow-red-200' : 'bg-amber-100 text-amber-600'
+        }`}
       >
-        {isMuted ? (
-          <>
-            <VolumeX className="w-5 h-5" />
-            Voice Off
-          </>
-        ) : (
-          <>
-            <Volume2 className="w-5 h-5" />
-            Voice On
-          </>
-        )}
+        <Mic size={24} />
       </button>
+      <div>
+        <p className="font-bold text-slate-700">
+          {isListening ? "Listening..." : "Voice Assistant"}
+        </p>
+        <p className="text-sm text-slate-500">
+          {isSpeaking ? "Speaking..." : "Click mic to speak"}
+        </p>
+      </div>
     </div>
   );
 });
 
-VoiceAssistant.displayName = 'VoiceAssistant';
+// Defines the props so your editor stops complaining
+VoiceAssistant.propTypes = {
+  greeting: PropTypes.string,
+  onCommand: PropTypes.func,
+  compact: PropTypes.bool
+};
 
+VoiceAssistant.displayName = "VoiceAssistant";
 export default VoiceAssistant;

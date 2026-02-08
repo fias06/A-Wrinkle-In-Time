@@ -1,18 +1,36 @@
-import base44 from "@base44/vite-plugin"
-import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+import { nodePolyfills } from 'vite-plugin-node-polyfills'
+import path from 'path'
 
-// https://vite.dev/config/
+// https://vitejs.dev/config/
 export default defineConfig({
   plugins: [
-    base44({
-      // Support for legacy code that imports the base44 SDK with @/integrations, @/entities, etc.
-      // can be removed if the code has been updated to use the new SDK imports from @base44/sdk
-      legacySDKImports: process.env.BASE44_LEGACY_SDK_IMPORTS === 'true',
-      hmrNotifier: true,
-      navigationNotifier: true,
-      visualEditAgent: true
-    }),
     react(),
-  ]
-});
+    // This plugin automagically fixes "Buffer", "process", "stream" errors
+    nodePolyfills({
+      protocolImports: true,
+      globals: {
+        Buffer: true,
+        global: true, // This helper also tries to fix global
+        process: true,
+      },
+    }),
+  ],
+  resolve: {
+    alias: {
+      // Tells Vite "@" maps to the "src" folder
+      "@": path.resolve(__dirname, "./src"),
+    },
+  },
+  // --- CRITICAL FIX FOR VIDEO ---
+  // simple-peer relies on "global" existing. This forces it to use the browser window.
+  define: {
+    'global': 'window',
+  },
+  // ------------------------------
+  server: {
+    port: 5173,
+    strictPort: true, 
+  }
+})

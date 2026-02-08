@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 import React, { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
