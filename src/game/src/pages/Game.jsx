@@ -1,12 +1,9 @@
-// @ts-nocheck
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import Phaser from 'phaser';
 import { Gamepad2, Users, ArrowLeft, Play, Volume2, VolumeX } from 'lucide-react';
 import { createPageUrl } from '@/utils';
-import { useAuth } from '@/lib/authContext';
-import { MainScene } from '@/game/src/scenes/MainScene';
+import CoopGame from '@/components/game/CoopGame';
 import LargeButton from '@/components/ui/LargeButton';
 
 // Genre-specific music tracks (royalty-free from Pixabay)
@@ -50,46 +47,12 @@ const DEFAULT_MUSIC = 'https://cdn.pixabay.com/audio/2022/05/27/audio_1808fbf07a
 
 export default function Game() {
   const navigate = useNavigate();
-  const { user } = useAuth();
   const [isPlaying, setIsPlaying] = useState(false);
   const [musicEnabled, setMusicEnabled] = useState(true);
   const [musicVolume, setMusicVolume] = useState(0.3);
   const [userGenre, setUserGenre] = useState('lofi');
-  const gameContainerRef = useRef(null);
   const gameRef = useRef(null);
   const audioRef = useRef(null);
-
-  // Initialize Phaser when playing, destroy on cleanup to avoid double canvas / memory leaks
-  useEffect(() => {
-    if (!isPlaying || !gameContainerRef.current) return;
-
-    const config = {
-      type: Phaser.AUTO,
-      parent: gameContainerRef.current,
-      width: 1104,
-      height: 624,
-      scale: {
-        mode: Phaser.Scale.FIT,
-        autoCenter: Phaser.Scale.CENTER_BOTH,
-      },
-      physics: {
-        default: 'arcade',
-        arcade: { gravity: { x: 0, y: 0 } },
-      },
-      scene: [MainScene],
-    };
-
-    const game = new Phaser.Game(config);
-    gameRef.current = game;
-    game.registry.set('display_name', user?.display_name ?? 'Player');
-
-    return () => {
-      if (gameRef.current) {
-        gameRef.current.destroy(true);
-        gameRef.current = null;
-      }
-    };
-  }, [isPlaying, user?.display_name]);
 
   // Load user's music preference
   useEffect(() => {
@@ -220,10 +183,11 @@ export default function Game() {
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
           >
-            <div
-              ref={gameContainerRef}
-              className="w-full rounded-xl overflow-hidden bg-slate-900"
-              style={{ minHeight: 400 }}
+            <CoopGame
+              ref={gameRef}
+              isPlayer1={true}
+              onGameAction={() => {}}
+              remoteAction={null}
             />
             
             <div className="mt-6 text-center">
