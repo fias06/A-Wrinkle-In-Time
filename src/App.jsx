@@ -5,8 +5,8 @@ import { Toaster } from "@/components/ui/toaster";
 import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClientInstance } from '@/lib/query-client';
 
-// STREAM SDK HOOKS
-import { useCalls } from '@stream-io/video-react-sdk';
+// STREAM SDK HOOKS - Commented out to prevent blank page if Stream.io isn't configured
+// import { useCalls } from '@stream-io/video-react-sdk';
 
 // LIB & CONFIG IMPORTS
 import NavigationTracker from '@/lib/NavigationTracker';
@@ -21,25 +21,37 @@ import { VideoProvider } from '@/context/VideoProvider';
 import LargeButton from '@/components/ui/LargeButton';
 import { Phone, X } from 'lucide-react';
 
-const { Pages, Layout } = pagesConfig;
+// Safely destructure pagesConfig
+let Pages, Layout;
+try {
+  ({ Pages, Layout } = pagesConfig);
+  if (!Pages) {
+    console.error('❌ Pages is undefined in pagesConfig!');
+    throw new Error('Pages configuration is missing');
+  }
+} catch (error) {
+  console.error('❌ Error loading pages config:', error);
+  // Fallback to prevent crash
+  Pages = {};
+  Layout = null;
+}
 
 /**
  * FIXED COMPONENT: IncomingCallAlert
  * This pops up when someone calls you. 
  * The try/catch is now correctly at the top level to prevent initialization crashes.
  */
+// IncomingCallAlert component - DISABLED for now to prevent blank page
+// This component requires being inside <StreamVideo> context and Stream.io hooks
+// We'll enable it later when Stream.io is fully configured
+/*
 const IncomingCallAlert = () => {
   const navigate = useNavigate();
   
-  // 🟢 SAFETY GUARD: Attempt to access Stream calls
-  let calls = [];
-  try {
-    // This hook MUST be inside <StreamVideo> context
-    calls = useCalls(); 
-  } catch (e) {
-    // If the Stream client isn't ready yet, return null to skip this render cycle
-    return null;
-  }
+  // This hook MUST be inside <StreamVideo> context
+  // If it's not available, this will throw an error
+  // We'll handle this by not rendering the component at all if Stream isn't configured
+  const calls = useCalls();
 
   // Find a call that is currently "ringing" for this user
   const incomingCall = calls.find((c) => c.state.callingState === 'ringing');
@@ -89,6 +101,7 @@ const IncomingCallAlert = () => {
     </div>
   );
 };
+*/
 
 const LayoutWrapper = ({ children, currentPageName }) => {
   return Layout ? (
@@ -99,11 +112,24 @@ const LayoutWrapper = ({ children, currentPageName }) => {
 };
 
 const AuthenticatedApp = () => {
-  const { isAuthenticated, loading } = useAuth(); // Access auth state
+  console.log('🟢 AuthenticatedApp rendering...');
+  
+  let isAuthenticated, loading;
+  try {
+    const auth = useAuth();
+    isAuthenticated = auth.isAuthenticated;
+    loading = auth.loading;
+    console.log('🟢 Auth state:', { isAuthenticated, loading });
+  } catch (error) {
+    console.error('❌ Error getting auth state:', error);
+    isAuthenticated = false;
+    loading = false;
+  }
 
   // 1. LOADING STATE: 
   // This prevents the blank page while Supabase checks the session.
   if (loading) {
+    console.log('⏳ Showing loading state...');
     return (
       <div className="fixed inset-0 flex items-center justify-center bg-white">
         <div className="flex flex-col items-center gap-4">
@@ -113,12 +139,25 @@ const AuthenticatedApp = () => {
       </div>
     );
   }
+  
+  console.log('✅ Rendering routes...');
+  
+  // Safety check: Ensure Pages exist
+  if (!Pages || !Pages.Home) {
+    console.error('❌ Pages.Home is missing! Available pages:', Pages ? Object.keys(Pages) : 'Pages is null');
+    return (
+      <div className="fixed inset-0 flex items-center justify-center bg-white">
+        <div className="text-center p-8">
+          <h1 className="text-2xl font-bold text-red-600 mb-4">Configuration Error</h1>
+          <p className="text-slate-600 mb-2">Pages configuration is missing.</p>
+          <p className="text-sm text-slate-400">Check pages.config.js and browser console for details.</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <>
-      {/* 🟢 THE FIX: Ringer only renders if authenticated to ensure it's inside VideoProvider */}
-      {isAuthenticated && <IncomingCallAlert />} 
-      
       <Routes>
         <Route path="/" element={<LayoutWrapper currentPageName="Home"><Pages.Home /></LayoutWrapper>} />
         <Route path="/Home" element={<LayoutWrapper currentPageName="Home"><Pages.Home /></LayoutWrapper>} />
@@ -138,6 +177,8 @@ const AuthenticatedApp = () => {
 
 // --- THE ROOT COMPONENT ---
 function App() {
+  console.log('🔵 App component rendering...');
+  
   try {
     return (
       <AuthProvider>
