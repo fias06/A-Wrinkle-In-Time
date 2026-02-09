@@ -1,12 +1,12 @@
-#A Wrinkle In Time
+**A Wrinkle In Time**
 
 A voice-first social platform that enables accessible connection and play without relying on a keyboard or mouse.
-
 A Wrinkle In Time is designed for seniors and motor-impaired users, allowing them to navigate, socialize, and play games using only their voice.
 
-🧩 Overview
+🧩 Overview 
 
 Modern digital platforms assume fine motor control, keyboards, and mice — creating barriers for many users.
+
 A Wrinkle In Time explores a different approach: voice as the primary interface.
 
 The platform combines conversational AI, real-time audio feedback, and voice-controlled games to create an accessible and engaging social experience.
